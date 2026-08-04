@@ -112,7 +112,9 @@ export function PacketReceiver() {
       addStage("Debounce", "SUCCESS", `Accepted new read for ${packetId}`);
 
       if (parsed.type === "manifest") {
-        if (!manifest) {
+        const isNewSession = !manifest || parsed.transferId !== manifest.transferId;
+
+        if (isNewSession) {
           setPhase("Receiving Metadata");
           delete parsed.type;
           const { valid, reason } = validateManifestDetailed(parsed);
@@ -120,6 +122,12 @@ export function PacketReceiver() {
           if (valid) {
             addStage("Schema Validate", "SUCCESS", "Manifest conforms to schema");
             const m = parsed as TransferManifest;
+            
+            // Clean up previous transfer state in IndexedDB if starting a new one
+            if (manifest) {
+              await clearTransfer(manifest.transferId);
+            }
+            
             await saveManifest(m);
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
             
