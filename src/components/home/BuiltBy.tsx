@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import * as React from "react";
 import Link from "next/link";
 import { motion, useInView } from "motion/react";
@@ -65,8 +67,15 @@ export function BuiltBy() {
             {/* Avatar */}
             <div className="flex-shrink-0">
               <div className="relative w-20 h-20 md:w-24 md:h-24">
-                <div className="w-full h-full rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-cyan-500 flex items-center justify-center text-3xl font-extrabold text-white shadow-[0_0_40px_rgba(99,102,241,0.35)]">
-                  R
+                <div className="w-full h-full rounded-2xl overflow-hidden ring-2 ring-indigo-500/30 shadow-[0_0_40px_rgba(99,102,241,0.25)]">
+                  <Image
+                    src="/rishvin-reddy.png"
+                    alt="Rishvin Reddy — Creator of PrismTransfer"
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover object-top"
+                    priority
+                  />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-500 border-2 border-background shadow-sm" />
               </div>

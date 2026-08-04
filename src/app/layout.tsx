@@ -96,6 +96,7 @@ const globalSchemas = [
     "description":
       "Rishvin Reddy is a software engineer and founder of Rishvin Labs, specializing in cybersecurity, full-stack web development, IoT systems, blockchain applications, and privacy-focused browser technologies. Creator of PrismTransfer, an offline file transfer platform using animated QR codes.",
     "url": "https://rishvinreddy.vercel.app",
+    "image": `${CANONICAL}/rishvin-reddy.png`,
     "jobTitle": "Software Engineer & Founder",
     "worksFor": {
       "@type": "Organization",

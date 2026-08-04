@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 import { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -119,7 +120,7 @@ const personSchema = {
   "description":
     "Rishvin Reddy is a software engineer and founder of Rishvin Labs, specializing in cybersecurity, full-stack web development, IoT systems, blockchain applications, and privacy-focused browser technologies. Creator of PrismTransfer, an offline file transfer platform using animated QR codes.",
   "url": "https://rishvinreddy.vercel.app",
-  "image": `${CANONICAL}/logo.png`,
+  "image": `${CANONICAL}/rishvin-reddy.png`,
   "email": "",
   "jobTitle": "Software Engineer & Founder",
   "worksFor": {
@@ -209,8 +210,17 @@ export default function AuthorPage() {
           <div className="relative z-10 flex flex-col md:flex-row md:items-start gap-8">
             {/* Avatar */}
             <div className="flex-shrink-0">
-              <div className="w-24 h-24 md:w-32 md:h-32 rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-cyan-500 flex items-center justify-center text-4xl font-extrabold text-white shadow-[0_0_60px_rgba(99,102,241,0.4)]">
-                R
+              <div className="relative w-24 h-24 md:w-32 md:h-32">
+                <div className="w-full h-full rounded-2xl overflow-hidden ring-2 ring-indigo-500/40 shadow-[0_0_60px_rgba(99,102,241,0.35)]">
+                  <Image
+                    src="/rishvin-reddy.png"
+                    alt="Rishvin Reddy — Creator of PrismTransfer and Founder of Rishvin Labs"
+                    width={128}
+                    height={128}
+                    className="w-full h-full object-cover object-top"
+                    priority
+                  />
+                </div>
               </div>
             </div>
 
