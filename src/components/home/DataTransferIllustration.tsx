@@ -52,8 +52,8 @@ export function DataTransferIllustration() {
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const { innerWidth, innerHeight } = window;
-      const x = (e.clientX - innerWidth / 2) / 40; 
-      const y = (e.clientY - innerHeight / 2) / 40;
+      const x = (e.clientX - innerWidth / 2) / 35; // increased amplitude slightly
+      const y = (e.clientY - innerHeight / 2) / 35;
       setMousePos({ x, y });
     };
     window.addEventListener("mousemove", handleMouseMove);
@@ -72,10 +72,14 @@ export function DataTransferIllustration() {
         }}
       >
         
+        {/* Concentric Tech Rings in the background */}
+        <div className="absolute top-[22%] left-[24%] w-[420px] h-[420px] border border-dashed border-indigo-500/10 rounded-full animate-[spin_40s_linear_infinite] z-0" />
+        <div className="absolute top-[18%] left-[20%] w-[480px] h-[480px] border border-dashed border-cyan-500/5 rounded-full animate-[spin_55s_linear_reverse_infinite] z-0" />
+        
         {/* Background Blob with pulse and parallax animation */}
         <motion.div 
           style={{
-            transform: `translate3d(${mousePos.x * -1.5}px, ${mousePos.y * -1.5}px, -100px)`,
+            transform: `translate3d(${mousePos.x * -1.8}px, ${mousePos.y * -1.8}px, -150px)`,
           }}
           animate={{ 
             borderRadius: [
@@ -88,12 +92,29 @@ export function DataTransferIllustration() {
           className="absolute top-[10%] left-[15%] w-[60%] h-[70%] bg-indigo-500/5 dark:bg-indigo-500/10 z-0 transition-transform duration-300 ease-out" 
         />
         
-        {/* Particles */}
-        <div className="absolute top-[15%] left-[10%] w-3 h-3 rounded-full border border-indigo-400/40 z-10 animate-pulse" />
-        <div className="absolute top-[20%] left-[45%] w-2 h-2 rounded-full bg-cyan-400/40 z-10 animate-ping" />
-        <div className="absolute top-[10%] right-[25%] w-4 h-4 rounded-full border border-cyan-400/30 z-10" />
-        <div className="absolute top-[40%] right-[10%] w-1.5 h-1.5 rounded-full bg-indigo-400/30 z-10 animate-pulse" />
-        <div className="absolute bottom-[20%] left-[5%] w-3 h-3 rounded-full border border-indigo-400/20 z-10" />
+        {/* Drifting Data Dust Swarm (Parallaxing) */}
+        {[
+          { top: "15%", left: "8%", delay: "0s", color: "bg-indigo-400" },
+          { top: "25%", left: "40%", delay: "1.5s", color: "bg-cyan-400" },
+          { top: "12%", right: "20%", delay: "0.8s", color: "bg-violet-400" },
+          { top: "45%", right: "5%", delay: "2.2s", color: "bg-indigo-400" },
+          { bottom: "25%", left: "10%", delay: "1.9s", color: "bg-cyan-400" },
+          { bottom: "35%", right: "15%", delay: "0.5s", color: "bg-violet-400" },
+          { top: "60%", left: "30%", delay: "2.8s", color: "bg-emerald-400" },
+          { bottom: "15%", right: "45%", delay: "1.2s", color: "bg-indigo-400" },
+        ].map((p, i) => (
+          <div 
+            key={i}
+            className={cn("absolute w-1.5 h-1.5 rounded-full opacity-40 blur-[0.5px] animate-[pulse_3s_infinite] z-10", p.color)}
+            style={{ 
+              top: p.top, 
+              left: p.left,
+              right: p.right,
+              animationDelay: p.delay,
+              transform: `translate3d(${mousePos.x * -0.5}px, ${mousePos.y * -0.5}px, -50px)`
+            }}
+          />
+        ))}
 
         {/* Dashed Line SVG Trajectory with flowing laser packets */}
         <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none" viewBox="0 0 800 600" style={{ transform: "translateZ(10px)" }}>
@@ -158,16 +179,22 @@ export function DataTransferIllustration() {
           <div className="w-8 h-8 bg-emerald-800/20 border border-emerald-500/20 rounded-tr-[32px] rounded-bl-[32px]" />
         </div>
 
-        {/* Smartphone with 3D Perspective & Parallax */}
+        {/* Smartphone with 3D Dynamic Tilting & Parallax */}
         <div 
           style={{ 
-            transform: `translate3d(${mousePos.x * 0.9}px, ${mousePos.y * 0.9}px, 50px) rotateY(15deg) rotateX(8deg)`,
+            transform: `translate3d(${mousePos.x * 0.9}px, ${mousePos.y * 0.9}px, 60px) rotateY(${15 + mousePos.x * 0.2}deg) rotateX(${8 - mousePos.y * 0.2}deg)`,
             transformStyle: "preserve-3d"
           }}
           className="absolute bottom-[120px] left-[150px] w-[150px] h-[300px] bg-zinc-800 border border-zinc-700/80 rounded-[25px] z-20 shadow-[10px_20px_50px_rgba(0,0,0,0.4)] flex justify-center items-center transition-transform duration-300 ease-out"
         >
           <div className="w-[140px] h-[290px] bg-zinc-950 border border-zinc-850 rounded-[20px] relative overflow-hidden flex flex-col justify-between py-4 items-center">
             
+            {/* Concentric expanding optical pings behind phone display elements */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+              <div className="w-32 h-32 border border-cyan-500/10 rounded-full animate-[ping_3s_infinite]" />
+              <div className="w-32 h-32 border border-indigo-500/5 rounded-full animate-[ping_3s_infinite] [animation-delay:1.5s]" />
+            </div>
+
             {/* Gloss reflection overlay */}
             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none z-20 transform rotate-12 scale-150 translate-x-[-15%]" />
             
@@ -179,13 +206,19 @@ export function DataTransferIllustration() {
               <span>9:41 AM</span>
               <div className="flex items-center space-x-1">
                 <WifiOff className="w-2.5 h-2.5 text-red-500/80" />
-                <span className="bg-zinc-850 text-[6px] px-1 rounded-sm text-red-400 font-bold border border-red-500/20">AIRGAP</span>
+                <span className="bg-zinc-855 text-[6px] px-1 rounded-sm text-red-400 font-bold border border-red-500/20">AIRGAP</span>
               </div>
             </div>
 
             {/* Simulated Live Flashing QR Stream */}
-            <div className="flex-1 flex items-center justify-center relative z-10">
+            <div className="flex-1 flex flex-col items-center justify-center relative z-10 space-y-1.5 mt-2">
               <MiniQR />
+              
+              {/* Flashing Progress Bar underneath QR */}
+              <div className="w-20 bg-zinc-900 rounded-full h-[6px] p-[1px] border border-zinc-800 overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full animate-[pulse_1.5s_infinite]" style={{ width: "65%" }} />
+              </div>
+              <span className="text-[6px] font-mono text-indigo-400 font-bold uppercase tracking-wider animate-pulse">Sending: 65%</span>
             </div>
 
             {/* Folder on Phone Screen */}
@@ -214,7 +247,7 @@ export function DataTransferIllustration() {
 
         {/* Flying Documents with Parallax */}
         <motion.div 
-          style={{ transform: `translate3d(${mousePos.x * 1.5}px, ${mousePos.y * 1.5}px, 80px) rotateY(15deg) rotateX(10deg)` }}
+          style={{ transform: `translate3d(${mousePos.x * 1.5}px, ${mousePos.y * 1.5}px, 80px) rotateY(${15 + mousePos.x * 0.3}deg) rotateX(${10 - mousePos.y * 0.3}deg)` }}
           animate={{ y: [0, -15, 0], rotate: [-15, -10, -15] }}
           transition={{ repeat: Infinity, duration: 6, delay: 0, ease: "easeInOut" }}
           className="absolute bottom-[280px] left-[260px] w-[65px] h-[85px] bg-white border border-zinc-200 rounded-[4px] shadow-xl p-2 flex flex-col gap-1.5 z-30 transition-transform duration-300 ease-out"
@@ -226,7 +259,7 @@ export function DataTransferIllustration() {
         </motion.div>
 
         <motion.div 
-          style={{ transform: `translate3d(${mousePos.x * 1.8}px, ${mousePos.y * 1.8}px, 100px) rotateY(-10deg) rotateX(10deg)` }}
+          style={{ transform: `translate3d(${mousePos.x * 1.8}px, ${mousePos.y * 1.8}px, 100px) rotateY(${-10 + mousePos.x * 0.3}deg) rotateX(${10 - mousePos.y * 0.3}deg)` }}
           animate={{ y: [0, -20, 0], rotate: [5, 10, 5] }}
           transition={{ repeat: Infinity, duration: 5, delay: 1, ease: "easeInOut" }}
           className="absolute bottom-[320px] left-[380px] w-[65px] h-[85px] bg-white border border-zinc-200 rounded-[4px] shadow-xl p-2 flex flex-col gap-1.5 z-30 transition-transform duration-300 ease-out"
@@ -238,7 +271,7 @@ export function DataTransferIllustration() {
         </motion.div>
 
         <motion.div 
-          style={{ transform: `translate3d(${mousePos.x * 1.3}px, ${mousePos.y * 1.3}px, 60px) rotateY(-15deg) rotateX(10deg)` }}
+          style={{ transform: `translate3d(${mousePos.x * 1.3}px, ${mousePos.y * 1.3}px, 60px) rotateY(${-15 + mousePos.x * 0.3}deg) rotateX(${10 - mousePos.y * 0.3}deg)` }}
           animate={{ y: [0, -12, 0], rotate: [15, 8, 15] }}
           transition={{ repeat: Infinity, duration: 7, delay: 0.5, ease: "easeInOut" }}
           className="absolute bottom-[280px] left-[490px] w-[65px] h-[85px] bg-white border border-zinc-200 rounded-[4px] shadow-xl p-2 flex flex-col gap-1.5 z-30 transition-transform duration-300 ease-out"
@@ -249,10 +282,10 @@ export function DataTransferIllustration() {
           <div className="w-[80%] h-[3px] bg-zinc-200 rounded-full" />
         </motion.div>
 
-        {/* Laptop with 3D Perspective & Parallax */}
+        {/* Laptop with 3D Dynamic Tilting & Parallax */}
         <div 
           style={{ 
-            transform: `translate3d(${mousePos.x * -0.6}px, ${mousePos.y * -0.6}px, 30px) rotateY(-18deg) rotateX(8deg)`,
+            transform: `translate3d(${mousePos.x * -0.6}px, ${mousePos.y * -0.6}px, 40px) rotateY(${-18 + mousePos.x * 0.2}deg) rotateX(${8 - mousePos.y * 0.2}deg)`,
             transformStyle: "preserve-3d"
           }}
           className="absolute bottom-[120px] right-[120px] z-20 flex flex-col items-center transition-transform duration-300 ease-out"
@@ -285,7 +318,7 @@ export function DataTransferIllustration() {
                 <div className="flex-1 flex flex-col space-y-0.5 font-mono text-[6px] text-zinc-500 overflow-hidden leading-tight">
                   <div className="text-zinc-400 font-semibold truncate flex items-center gap-0.5"><ShieldCheck className="w-2.5 h-2.5 text-green-400" /> manifest.json accepted</div>
                   <div className="text-cyan-400 truncate">chunk_42.bin (CRC32 OK)</div>
-                  <div className="animate-pulse truncate text-zinc-600">verifying SHA-256...</div>
+                  <div className="animate-pulse truncate text-zinc-650 font-bold uppercase tracking-widest text-[5px]">verifying SHA-256...</div>
                 </div>
               </div>
               
@@ -312,9 +345,21 @@ export function DataTransferIllustration() {
 
             </div>
           </div>
-          {/* Base */}
-          <div className="w-[300px] h-[15px] bg-zinc-800 border-t border-zinc-700 rounded-b-[15px] relative shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+          
+          {/* Base / Keyboard deck */}
+          <div className="w-[300px] h-[15px] bg-zinc-800 border-t border-zinc-700 rounded-b-[15px] relative shadow-[0_15px_40px_rgba(0,0,0,0.6)]">
+            {/* Keyboard Backlighting glow */}
+            <div className="absolute top-0 inset-x-4 h-[2px] bg-cyan-400/30 blur-[2px] animate-pulse" />
+            
+            {/* Trackpad */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[60px] h-[5px] bg-zinc-900 rounded-b-[5px]" />
+            
+            {/* Grid keyboard keys indicator */}
+            <div className="absolute top-[2px] inset-x-8 h-[3px] grid grid-cols-12 gap-[1.5px] opacity-40">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="h-full bg-zinc-950 rounded-[0.5px]" />
+              ))}
+            </div>
           </div>
         </div>
 
