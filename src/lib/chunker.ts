@@ -14,12 +14,27 @@ import { encodeBase64Url } from "./encoder";
  * For now, returns a safe default of 800 bytes binary payload if not overridden.
  * This can be expanded later for dynamic capacity calculation.
  */
-export function calculateOptimalChunkSize(options?: TransferOptions): number {
+export function calculateOptimalChunkSize(options?: TransferOptions, totalCompressedSize?: number): number {
   if (options?.chunkSizeOverride) {
     return options.chunkSizeOverride;
   }
-  // Safe default for a medium-to-high density QR code
-  return DEFAULT_CHUNK_SIZE;
+
+  // Adaptive logic if size is provided
+  if (totalCompressedSize !== undefined && totalCompressedSize < 50 * 1024) {
+    return 220; // Very small files can easily fit 220
+  }
+
+  const mode = options?.reliabilityMode || "balanced";
+  switch (mode) {
+    case "speed":
+      return 220;
+    case "balanced":
+      return 180;
+    case "reliable":
+      return 120;
+    default:
+      return 180;
+  }
 }
 
 export interface ProcessedTransfer {
@@ -37,8 +52,6 @@ export async function processFileForTransfer(
 ): Promise<ProcessedTransfer> {
   const transferId = nanoid();
   const createdAt = Date.now();
-  const chunkSize = calculateOptimalChunkSize(options);
-
   // 1. Read File to ArrayBuffer
   const arrayBuffer = await file.arrayBuffer();
   const originalSize = arrayBuffer.byteLength;
@@ -52,8 +65,11 @@ export async function processFileForTransfer(
     level: (options?.compressionLevel ?? DEFAULT_COMPRESSION) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
   });
   const compressedSize = compressedData.byteLength;
+  
+  // 4. Calculate chunk size based on options and compressed size
+  const chunkSize = calculateOptimalChunkSize(options, compressedSize);
 
-  // 4. Calculate chunks
+  // 5. Calculate chunks
   const totalPackets = Math.ceil(compressedSize / chunkSize) || 1;
   const packets: TransferPacket[] = [];
 

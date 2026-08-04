@@ -9,8 +9,10 @@ import { TransferController } from "@/features/transfer/TransferController";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { getStagedFile } from "@/lib/fileStager";
+import { useSettings } from "@/contexts/settings";
 
 export default function SendPage() {
+  const { settings } = useSettings();
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [result, setResult] = React.useState<ProcessedTransfer | null>(null);
   const [isTransferring, setIsTransferring] = React.useState(false);
@@ -29,7 +31,7 @@ export default function SendPage() {
     setResult(null);
 
     try {
-      const processed = await processFileForTransfer(file);
+      const processed = await processFileForTransfer(file, settings);
       setResult(processed);
     } catch (error) {
       console.error("Error processing file:", error);

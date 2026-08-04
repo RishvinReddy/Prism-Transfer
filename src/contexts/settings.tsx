@@ -9,6 +9,7 @@ export interface AppSettings {
   developerMode: boolean;
   cameraPreference: "environment" | "user";
   reducedMotion: boolean;
+  reliabilityMode: "speed" | "balanced" | "reliable";
 }
 
 const defaultSettings: AppSettings = {
@@ -18,6 +19,7 @@ const defaultSettings: AppSettings = {
   developerMode: false,
   cameraPreference: "environment",
   reducedMotion: false,
+  reliabilityMode: "balanced",
 };
 
 interface SettingsContextType {

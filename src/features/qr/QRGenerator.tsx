@@ -31,7 +31,7 @@ export const QRGenerator = React.memo(function QRGenerator({
           margin: 4,
           errorCorrectionLevel: DEFAULT_ERROR_CORRECTION as any,
           color: {
-            dark: "#09090b",
+            dark: "#000000",
             light: "#ffffff",
           },
         },

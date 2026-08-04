@@ -39,6 +39,7 @@ export interface TransferOptions {
   qrVersion?: number; // 1-40
   errorCorrectionLevel?: "L" | "M" | "Q" | "H";
   chunkSizeOverride?: number; // Bytes of binary payload per chunk (before encoding)
+  reliabilityMode?: "speed" | "balanced" | "reliable";
 }
 
 export interface TransferStats {
