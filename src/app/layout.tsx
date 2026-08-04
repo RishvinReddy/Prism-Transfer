@@ -33,7 +33,7 @@ export default function RootLayout({
         >
           <SettingsProvider>
             <Navbar />
-            <main className="flex-1 flex flex-col container mx-auto px-4 max-w-5xl py-8">
+            <main className="flex-1 flex flex-col container mx-auto px-0 max-w-none py-8">
               {children}
             </main>
           </SettingsProvider>
