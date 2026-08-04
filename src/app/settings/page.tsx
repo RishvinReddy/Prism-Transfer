@@ -13,41 +13,42 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto w-full space-y-8">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
+      <div className="text-center space-y-2 mt-4">
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground text-sm md:text-base">
           Configure how PrismTransfer generates and receives data.
         </p>
       </div>
 
-      <Card className="w-full">
+      <Card className="w-full bg-card/50 backdrop-blur-md shadow-lg border-border/50">
         <CardHeader>
-          <CardTitle>Transfer Options</CardTitle>
-          <CardDescription>Adjust the speed and reliability of your transfers.</CardDescription>
+          <CardTitle className="text-xl">Transfer</CardTitle>
+          <CardDescription>Adjust the speed, chunk size, and reliability of your transfers.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <Label htmlFor="fps" className="text-base">Playback Speed (FPS)</Label>
-              <span className="text-sm font-mono">{settings.fps} fps</span>
+              <Label htmlFor="fps" className="text-base font-semibold">Playback Speed (FPS)</Label>
+              <span className="text-sm font-mono text-primary bg-primary/10 px-2 py-1 rounded-md">{settings.fps} fps</span>
             </div>
             <Slider 
               id="fps"
               value={[settings.fps]} 
               min={1} max={30} step={1} 
+              className="py-4"
               onValueChange={(val) => updateSettings({ fps: Array.isArray(val) ? val[0] : (val as number) })} 
             />
             <p className="text-xs text-muted-foreground">Higher FPS transfers files faster but requires a better camera on the receiving device.</p>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-base">QR Error Correction</Label>
+          <div className="space-y-3 pt-4 border-t border-border/50">
+            <Label className="text-base font-semibold">QR Error Correction</Label>
             <Select 
               value={settings.errorCorrectionLevel} 
               onValueChange={(val: any) => updateSettings({ errorCorrectionLevel: val })}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full bg-muted/50">
                 <SelectValue placeholder="Select level" />
               </SelectTrigger>
               <SelectContent>
@@ -57,15 +58,25 @@ export default function SettingsPage() {
                 <SelectItem value="H">High (H) - 30% recovery, most robust</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">Determines how much optical interference the stream can survive.</p>
           </div>
+        </CardContent>
+      </Card>
 
+      <Card className="w-full bg-card/50 backdrop-blur-md shadow-lg border-border/50">
+        <CardHeader>
+          <CardTitle className="text-xl">Scanner</CardTitle>
+          <CardDescription>Configure camera hardware and developer diagnostics.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          
           <div className="space-y-3">
-            <Label className="text-base">Camera Preference</Label>
+            <Label className="text-base font-semibold">Camera Preference</Label>
             <Select 
               value={settings.cameraPreference} 
               onValueChange={(val: any) => updateSettings({ cameraPreference: val })}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full bg-muted/50">
                 <SelectValue placeholder="Select camera" />
               </SelectTrigger>
               <SelectContent>
@@ -75,18 +86,9 @@ export default function SettingsPage() {
             </Select>
           </div>
 
-        </CardContent>
-      </Card>
-
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Developer Options</CardTitle>
-          <CardDescription>Advanced metrics and diagnostic overlays.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base">Developer Dashboard</Label>
+          <div className="flex items-center justify-between pt-4 border-t border-border/50">
+            <div className="space-y-1">
+              <Label className="text-base font-semibold">Developer Diagnostics</Label>
               <p className="text-xs text-muted-foreground">Show real-time performance metrics during transfers.</p>
             </div>
             <Switch 
@@ -96,6 +98,26 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="w-full bg-card/50 backdrop-blur-md shadow-lg border-border/50">
+        <CardHeader>
+          <CardTitle className="text-xl">Appearance & Accessibility</CardTitle>
+          <CardDescription>Customize the user interface.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-semibold">Reduced Motion</Label>
+              <p className="text-xs text-muted-foreground">Disables page transitions and decorative background animations.</p>
+            </div>
+            <Switch 
+              checked={settings.reducedMotion} 
+              onCheckedChange={(checked) => updateSettings({ reducedMotion: checked })} 
+            />
+          </div>
+        </CardContent>
+      </Card>
+
     </div>
   );
 }

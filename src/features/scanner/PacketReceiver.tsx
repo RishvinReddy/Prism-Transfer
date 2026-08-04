@@ -234,37 +234,42 @@ export function PacketReceiver() {
             <p className="text-xs text-muted-foreground">The file has been successfully downloaded.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="font-medium text-foreground">
-                {manifest ? `Receiving ${manifest.filename}` : "Waiting for Manifest..."}
+          <div className="space-y-6">
+            <div className="flex justify-between items-end">
+              <div className="flex flex-col">
+                <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium mb-1">Status</span>
+                <span className="font-semibold text-lg text-foreground leading-none">
+                  {manifest ? manifest.filename : "Waiting for Manifest..."}
+                </span>
+              </div>
+              <span className="text-4xl font-extrabold text-primary tracking-tighter tabular-nums">
+                {tracker.progress.percentage}%
               </span>
-              <span className="text-primary font-mono">{tracker.progress.percentage}%</span>
             </div>
 
-            <div className="h-3 w-full bg-muted rounded-full overflow-hidden">
+            <div className="h-4 w-full bg-muted/50 rounded-full overflow-hidden border border-border/50">
               <div
-                className="h-full bg-primary transition-all duration-200 ease-out"
+                className="h-full bg-primary transition-all duration-300 ease-out shadow-[0_0_15px_rgba(99,102,241,0.5)]"
                 style={{ width: `${tracker.progress.percentage}%` }}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-y-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
-              <div className="flex flex-col">
-                <span className="font-medium text-foreground">{tracker.progress.packetsReceived} / {tracker.progress.totalPackets}</span>
-                <span>Packets</span>
+            <div className="grid grid-cols-2 gap-4 text-sm pt-2">
+              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Packets Received</span>
+                <span className="font-mono text-lg text-foreground">{tracker.progress.packetsReceived} <span className="text-muted-foreground text-sm">/ {tracker.progress.totalPackets}</span></span>
               </div>
-              <div className="flex flex-col text-right">
-                <span className="font-medium text-foreground">{tracker.progress.packetsPerSecond}</span>
-                <span>Packets/sec</span>
+              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40 text-right">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Speed</span>
+                <span className="font-mono text-lg text-foreground">{tracker.progress.packetsPerSecond} <span className="text-muted-foreground text-sm">pkts/s</span></span>
               </div>
-              <div className="flex flex-col">
-                <span className="font-medium text-foreground">{tracker.progress.duplicateCount}</span>
-                <span>Duplicates Ignored</span>
+              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Duplicates</span>
+                <span className="font-mono text-lg text-foreground">{tracker.progress.duplicateCount}</span>
               </div>
-              <div className="flex flex-col text-right">
-                <span className="font-medium text-foreground text-destructive">{tracker.progress.corruptedCount}</span>
-                <span>Corrupted</span>
+              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40 text-right">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Corrupted</span>
+                <span className="font-mono text-lg text-destructive">{tracker.progress.corruptedCount}</span>
               </div>
             </div>
             

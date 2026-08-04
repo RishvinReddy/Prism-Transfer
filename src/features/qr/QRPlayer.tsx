@@ -63,8 +63,8 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
     <div className="flex flex-col items-center space-y-6 w-full max-w-md mx-auto">
       <Card className="p-4 bg-white shadow-xl rounded-xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full bg-black/80 backdrop-blur-sm text-white p-3 text-xs flex flex-col z-10 space-y-1">
-          <div className="flex justify-between font-bold">
-            <span>PrismTransfer</span>
+          <div className="flex justify-between font-bold items-center">
+            <span className="flex items-center gap-2">PrismTransfer <span className="px-1.5 py-0.5 rounded-sm bg-primary/20 text-primary text-[9px] uppercase tracking-widest font-mono">v1</span></span>
             <span className="font-mono text-cyan-400">{fps} FPS</span>
           </div>
           <div className="flex justify-between text-white/80">

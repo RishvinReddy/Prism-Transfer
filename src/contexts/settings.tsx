@@ -8,6 +8,7 @@ export interface AppSettings {
   compressionLevel: number;
   developerMode: boolean;
   cameraPreference: "environment" | "user";
+  reducedMotion: boolean;
 }
 
 const defaultSettings: AppSettings = {
@@ -16,6 +17,7 @@ const defaultSettings: AppSettings = {
   compressionLevel: 9,
   developerMode: false,
   cameraPreference: "environment",
+  reducedMotion: false,
 };
 
 interface SettingsContextType {

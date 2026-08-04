@@ -4,28 +4,25 @@ import * as React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { processFileForTransfer, ProcessedTransfer } from "@/lib/chunker";
-import { Loader2, FileCheck } from "lucide-react";
+import { Loader2, FileCheck, UploadCloud, Clock, HardDrive, File as FileIcon, Layers, QrCode } from "lucide-react";
 import { TransferController } from "@/features/transfer/TransferController";
+import { motion, AnimatePresence } from "motion/react";
+import { cn } from "@/lib/utils";
 
 export default function SendPage() {
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [result, setResult] = React.useState<ProcessedTransfer | null>(null);
   const [isTransferring, setIsTransferring] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     setIsProcessing(true);
     setResult(null);
 
     try {
-      // Execute the Phase 2 File Engine pipeline
       const processed = await processFileForTransfer(file);
       setResult(processed);
-      console.log("Transfer Manifest:", processed.manifest);
-      console.log(`Generated ${processed.packets.length} data packets.`);
     } catch (error) {
       console.error("Error processing file:", error);
       alert("Failed to process file.");
@@ -34,71 +31,149 @@ export default function SendPage() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  };
+
   if (isTransferring && result) {
     return (
-      <div className="flex flex-col items-center max-w-2xl mx-auto w-full space-y-8 mt-12">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center max-w-3xl mx-auto w-full space-y-8 mt-4"
+      >
         <TransferController 
           transfer={result} 
           onCancel={() => setIsTransferring(false)} 
         />
-      </div>
+      </motion.div>
     );
   }
 
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto w-full space-y-8">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Send File</h1>
-        <p className="text-muted-foreground">
-          Select a file to begin generating the QR transfer sequence.
+      <div className="text-center space-y-3 mt-4">
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Send File</h1>
+        <p className="text-muted-foreground text-sm md:text-base max-w-md mx-auto">
+          Drag and drop any file to encode it into a secure, high-density optical transfer stream.
         </p>
       </div>
       
-      <Card className="w-full bg-card/50 backdrop-blur border-border/50 shadow-lg">
-        <CardHeader>
-          <CardTitle>File Selection</CardTitle>
-          <CardDescription>Choose any file to process it through the PrismTransfer engine.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center min-h-[250px] border-2 border-dashed border-border/50 rounded-lg m-6 bg-muted/20 relative overflow-hidden transition-colors hover:bg-muted/30">
-          
-          {isProcessing ? (
-            <div className="flex flex-col items-center space-y-4 text-primary">
-              <Loader2 className="h-10 w-10 animate-spin" />
-              <p className="text-sm font-medium animate-pulse">Processing file through engine...</p>
-            </div>
-          ) : result ? (
-            <div className="flex flex-col items-center space-y-4 p-6 text-center w-full">
-              <FileCheck className="h-12 w-12 text-success" />
-              <div className="space-y-1">
-                <p className="font-semibold text-lg text-foreground">{result.manifest.filename}</p>
-                <p className="text-sm text-muted-foreground">Original: {(result.manifest.originalSize / 1024).toFixed(2)} KB</p>
-                <p className="text-sm text-muted-foreground">Compressed: {(result.manifest.compressedSize / 1024).toFixed(2)} KB</p>
-                <p className="text-sm text-muted-foreground">Total Packets: {result.manifest.totalPackets}</p>
-              </div>
-              <div className="flex space-x-4 mt-6">
-                <Button onClick={() => setIsTransferring(true)} size="lg" className="rounded-full shadow-md font-bold px-8">
-                  Start Transfer
-                </Button>
-                <Button onClick={() => setResult(null)} variant="secondary" size="lg" className="rounded-full shadow-sm">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center space-y-4">
-              <p className="text-sm text-muted-foreground">Click to select or drag and drop a file here.</p>
-              <Button onClick={() => fileInputRef.current?.click()} size="lg" className="rounded-full shadow-md hover:shadow-lg transition-all">
-                Select File
-              </Button>
-              <input
-                type="file"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-            </div>
-          )}
+      <Card className="w-full bg-card/40 backdrop-blur-xl border-border/40 shadow-2xl rounded-2xl overflow-hidden">
+        <CardContent className="p-0">
+          <AnimatePresence mode="wait">
+            {isProcessing ? (
+              <motion.div 
+                key="processing"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center min-h-[350px] p-8 space-y-6"
+              >
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+                  <Loader2 className="h-12 w-12 text-primary animate-spin relative z-10" />
+                </div>
+                <div className="space-y-2 text-center">
+                  <h3 className="font-semibold text-lg text-foreground">Encoding Payload...</h3>
+                  <p className="text-sm text-muted-foreground animate-pulse">Slicing file and generating manifests</p>
+                </div>
+              </motion.div>
+            ) : result ? (
+              <motion.div 
+                key="result"
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="flex flex-col p-8 w-full"
+              >
+                <div className="flex items-center space-x-4 mb-8">
+                  <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
+                    <FileCheck className="h-6 w-6 text-success" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-xl text-foreground line-clamp-1">{result.manifest.filename}</h3>
+                    <p className="text-sm text-success font-medium">Ready for transmission</p>
+                  </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
+                    <span className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1"><HardDrive className="w-3 h-3 mr-1"/> Original Size</span>
+                    <span className="font-mono text-foreground">{(result.manifest.originalSize / 1024).toFixed(2)} KB</span>
+                  </div>
+                  <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
+                    <span className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1"><Layers className="w-3 h-3 mr-1"/> Compressed Size</span>
+                    <span className="font-mono text-primary">{(result.manifest.compressedSize / 1024).toFixed(2)} KB</span>
+                  </div>
+                  <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
+                    <span className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1"><QrCode className="w-3 h-3 mr-1"/> Total Packets</span>
+                    <span className="font-mono text-foreground">{result.manifest.totalPackets} frames</span>
+                  </div>
+                  <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
+                    <span className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1"><Clock className="w-3 h-3 mr-1"/> Est. Transfer</span>
+                    <span className="font-mono text-foreground">~{Math.max(1, Math.ceil(result.manifest.totalPackets / 10))} sec</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button onClick={() => setIsTransferring(true)} size="lg" className="flex-1 rounded-xl shadow-lg shadow-primary/20 font-bold h-12 hover:scale-[1.02] active:scale-[0.98] transition-transform">
+                    Start Optical Transfer
+                  </Button>
+                  <Button onClick={() => setResult(null)} variant="outline" size="lg" className="rounded-xl h-12 hover:scale-[1.02] active:scale-[0.98] transition-transform">
+                    Cancel
+                  </Button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="upload"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className={cn(
+                  "flex flex-col items-center justify-center min-h-[350px] p-8 m-4 rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer",
+                  isDragging ? "border-primary bg-primary/5 scale-[0.99]" : "border-border/60 bg-muted/10 hover:bg-muted/20 hover:border-primary/50"
+                )}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className={cn(
+                  "w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-200",
+                  isDragging ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" : "bg-muted text-muted-foreground"
+                )}>
+                  <UploadCloud className="w-8 h-8" />
+                </div>
+                <h3 className="font-semibold text-lg text-foreground mb-2">Drag & Drop file here</h3>
+                <p className="text-sm text-muted-foreground mb-6 text-center max-w-[250px]">
+                  or click to browse your local file system
+                </p>
+                <Button variant="secondary" className="rounded-full pointer-events-none">
+                  Select File
+                </Button>
+                <input
+                  type="file"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
     </div>

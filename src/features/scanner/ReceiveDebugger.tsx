@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Bug, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Download, Bug, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight } from "lucide-react";
 
 export type DebugStageStatus = "PENDING" | "SUCCESS" | "ERROR" | "SKIPPED";
 
@@ -28,6 +28,7 @@ interface ReceiveDebuggerProps {
 }
 
 export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
+  const [isPanelExpanded, setIsPanelExpanded] = React.useState(false);
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   const handleExport = () => {
@@ -41,16 +42,24 @@ export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
   if (sessions.length === 0) return null;
 
   return (
-    <Card className="w-full max-w-md bg-black/90 border-border/50 text-green-400 font-mono text-xs overflow-hidden mt-4 shadow-xl">
-      <div className="flex justify-between items-center p-3 border-b border-green-900/30 bg-black">
+    <Card className="w-full max-w-md bg-black/95 backdrop-blur-xl border-border/50 text-green-400 font-mono text-xs overflow-hidden mt-4 shadow-xl">
+      <div 
+        className="flex justify-between items-center p-3 border-b border-green-900/30 bg-black cursor-pointer hover:bg-black/80 transition-colors"
+        onClick={() => setIsPanelExpanded(!isPanelExpanded)}
+      >
         <div className="flex items-center space-x-2">
+          {isPanelExpanded ? <ChevronDown className="w-4 h-4 text-green-500" /> : <ChevronRight className="w-4 h-4 text-green-500" />}
           <Bug className="w-4 h-4 text-green-500" />
-          <span className="font-bold uppercase tracking-wider text-green-500">Pipeline Debugger</span>
+          <span className="font-bold uppercase tracking-wider text-green-500">Developer Diagnostics</span>
         </div>
-        <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-[10px] border-green-800 text-green-400 hover:bg-green-900/50">
-          <Download className="w-3 h-3 mr-1" /> Export JSON
-        </Button>
+        {isPanelExpanded && (
+          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleExport(); }} className="h-7 text-[10px] border-green-800 text-green-400 hover:bg-green-900/50">
+            <Download className="w-3 h-3 mr-1" /> Export JSON
+          </Button>
+        )}
       </div>
+
+      {isPanelExpanded && (
 
       <div className="flex flex-col h-[400px] overflow-y-auto">
         {sessions.map((session) => (
@@ -118,6 +127,7 @@ export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
           </div>
         ))}
       </div>
+      )}
     </Card>
   );
 }
