@@ -10,7 +10,12 @@ export interface QRScannerProps {
 
 export function QRScanner({ onScan, isScanning }: QRScannerProps) {
   const scannerRef = React.useRef<Html5Qrcode | null>(null);
+  const onScanRef = React.useRef(onScan);
   const regionId = "qr-reader-region";
+
+  React.useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   React.useEffect(() => {
     let active = true;
@@ -30,7 +35,7 @@ export function QRScanner({ onScan, isScanning }: QRScannerProps) {
               aspectRatio: 1.0,
             },
             (decodedText) => {
-              if (active) onScan(decodedText);
+              if (active) onScanRef.current(decodedText);
             },
             (errorMessage) => {
               // Ignore scan failures as they happen constantly between frames
@@ -52,7 +57,7 @@ export function QRScanner({ onScan, isScanning }: QRScannerProps) {
         scannerRef.current.stop().catch(console.error);
       }
     };
-  }, [isScanning, onScan]);
+  }, [isScanning]);
 
   return (
     <div className="w-full max-w-md mx-auto overflow-hidden rounded-xl border border-border/50 shadow-lg relative bg-black min-h-[300px] flex items-center justify-center">
