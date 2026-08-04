@@ -26,6 +26,20 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+const getModeConfig = (mode: string) => {
+  switch (mode) {
+    case "turbo":
+      return { fps: 45, ec: "L" as const };
+    case "speed":
+      return { fps: 30, ec: "M" as const };
+    case "reliable":
+      return { fps: 10, ec: "H" as const };
+    case "balanced":
+    default:
+      return { fps: 20, ec: "M" as const };
+  }
+};
+
 export function QRPlayer({ 
   frames, 
   manifest, 
@@ -36,13 +50,19 @@ export function QRPlayer({
   initialFps = DEFAULT_FPS 
 }: QRPlayerProps) {
   const { settings } = useSettings();
+  const config = getModeConfig(settings.reliabilityMode);
+  
   const [isPlaying, setIsPlaying] = React.useState(true);
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [fps, setFps] = React.useState(initialFps);
+  const [fps, setFps] = React.useState(config.fps);
   const [epochDuration, setEpochDuration] = React.useState(1000);
   const [isResetting, setIsResetting] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setFps(config.fps);
+  }, [settings.reliabilityMode, config.fps]);
 
   const totalFrames = frames.length;
 
@@ -117,7 +137,12 @@ export function QRPlayer({
           >
             {/* Always render the QR code to maintain camera tracking and guarantee the last frame is captured */}
             <div className="w-full h-full p-6 lg:p-10 box-border relative">
-              <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
+              <QRGenerator 
+                data={frames[currentIndex]} 
+                size={1024} 
+                className="w-full h-full" 
+                errorCorrectionLevel={config.ec}
+              />
               
               {/* Optional subtle visual indicator for sync pause in developer mode */}
               {isResetting && settings.developerMode && (

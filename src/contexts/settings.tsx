@@ -9,7 +9,7 @@ export interface AppSettings {
   developerMode: boolean;
   cameraPreference: "environment" | "user";
   reducedMotion: boolean;
-  reliabilityMode: "speed" | "balanced" | "reliable";
+  reliabilityMode: "speed" | "balanced" | "reliable" | "turbo";
 }
 
 const defaultSettings: AppSettings = {

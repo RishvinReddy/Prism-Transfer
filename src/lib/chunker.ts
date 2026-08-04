@@ -19,21 +19,18 @@ export function calculateOptimalChunkSize(options?: TransferOptions, totalCompre
     return options.chunkSizeOverride;
   }
 
-  // Adaptive logic if size is provided
-  if (totalCompressedSize !== undefined && totalCompressedSize < 50 * 1024) {
-    return 220; // Very small files can easily fit 220
-  }
-
   const mode = options?.reliabilityMode || "balanced";
   switch (mode) {
+    case "turbo":
+      return 1000;
     case "speed":
-      return 220;
+      return 600;
     case "balanced":
-      return 180;
+      return 300;
     case "reliable":
-      return 120;
+      return 150;
     default:
-      return 180;
+      return 300;
   }
 }
 

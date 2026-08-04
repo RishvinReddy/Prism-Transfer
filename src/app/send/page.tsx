@@ -12,9 +12,10 @@ import { getStagedFile } from "@/lib/fileStager";
 import { useSettings } from "@/contexts/settings";
 
 export default function SendPage() {
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [result, setResult] = React.useState<ProcessedTransfer | null>(null);
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -26,9 +27,16 @@ export default function SendPage() {
     }
   }, []);
 
+  React.useEffect(() => {
+    if (selectedFile) {
+      processFile(selectedFile);
+    }
+  }, [settings.reliabilityMode]);
+
   const processFile = async (file: File) => {
     setIsProcessing(true);
     setResult(null);
+    setSelectedFile(file);
 
     try {
       const processed = await processFileForTransfer(file, settings);
@@ -88,6 +96,27 @@ export default function SendPage() {
       </div>
       
       <Card className="w-full bg-card/40 backdrop-blur-xl border-border/40 shadow-2xl rounded-2xl overflow-hidden">
+        {/* Persistent Mode Selector */}
+        <div className="flex flex-col sm:flex-row border-b border-border/40 p-4 gap-3 sm:justify-between sm:items-center bg-muted/10">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Transfer Mode</span>
+          <div className="flex bg-muted rounded-lg p-0.5 text-xs font-medium self-start sm:self-auto">
+            {(["reliable", "balanced", "speed", "turbo"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => updateSettings({ reliabilityMode: m })}
+                className={cn(
+                  "px-3 py-1.5 rounded-md capitalize transition-all",
+                  settings.reliabilityMode === m
+                    ? "bg-background text-foreground shadow-sm font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {m === "balanced" ? "standard" : m}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <CardContent className="p-0">
           <AnimatePresence mode="wait">
             {isProcessing ? (
