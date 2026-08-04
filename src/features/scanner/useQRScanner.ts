@@ -111,18 +111,29 @@ export function useQRScanner({ onScan, isScanning, targetFps = 30 }: UseQRScanne
     const currentFps = 1000 / (now - lastScanTimeRef.current);
     lastScanTimeRef.current = now;
 
-    // Set canvas to video's native resolution
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Calculate crop region (matching the UI's object-cover square with 10% padding)
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const minDim = Math.min(vw, vh);
+    // UI box is 80% of the square (10% padding on each side)
+    const scanSize = Math.floor(minDim * 0.8);
+    
+    const sx = Math.floor((vw - scanSize) / 2);
+    const sy = Math.floor((vh - scanSize) / 2);
+
+    // Set canvas to exactly the crop region size
+    canvas.width = scanSize;
+    canvas.height = scanSize;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     
     if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Draw only the cropped region
+      ctx.drawImage(video, sx, sy, scanSize, scanSize, 0, 0, scanSize, scanSize);
+      const imageData = ctx.getImageData(0, 0, scanSize, scanSize);
       
       const decodeStart = performance.now();
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert", // Sender uses white QR on black, but let's just attempt normal
+        inversionAttempts: "attemptBoth",
       });
       const decodeTime = performance.now() - decodeStart;
 
@@ -134,13 +145,13 @@ export function useQRScanner({ onScan, isScanning, targetFps = 30 }: UseQRScanne
       }));
 
       if (code) {
-        console.log("[Scanner] QR detected");
+        console.log("QR FOUND");
         console.log(code.data);
         setDiagnostics(prev => ({ ...prev, decodedFrames: prev.decodedFrames + 1 }));
         onScanRef.current(code.data);
       } else {
-        // Log frame captured (maybe throttle this log if needed, but user asked for it)
-        // console.log("[Scanner] Frame captured (No QR)");
+        console.log("NO QR");
+        console.log(imageData.width, imageData.height);
       }
     }
 
