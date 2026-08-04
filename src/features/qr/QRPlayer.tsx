@@ -62,6 +62,18 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
             <span>Frame {currentIndex + 1} / {totalFrames}</span>
             <span>{Math.round(((currentIndex + 1) / totalFrames) * 100)}%</span>
           </div>
+          
+          <div className="mt-1 pt-1 border-t border-white/20 text-[10px] space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-white/60">Length:</span>
+              <span className="font-mono">{frames[currentIndex]?.length || 0} bytes</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/60">Type:</span>
+              <span className="font-mono">{currentIndex === 0 ? "Manifest" : `Packet ${currentIndex}`}</span>
+            </div>
+          </div>
+
           <div className="w-full bg-white/20 h-1.5 rounded-full mt-1 overflow-hidden">
             <div 
               className="bg-indigo-500 h-full transition-all duration-100" 

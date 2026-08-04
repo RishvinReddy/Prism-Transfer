@@ -28,6 +28,28 @@ export function validateManifest(manifest: Partial<TransferManifest>): manifest 
   return true;
 }
 
+export function validateManifestDetailed(manifest: Partial<TransferManifest> | null): { valid: boolean; reason?: string } {
+  if (!manifest) return { valid: false, reason: "Manifest is null or undefined" };
+  
+  const requiredFields = [
+    "version", "transferId", "filename", "mimeType", 
+    "originalSize", "compressedSize", "chunkSize", 
+    "totalPackets", "sha256", "compressionAlgorithm"
+  ];
+
+  for (const field of requiredFields) {
+    if (manifest[field as keyof TransferManifest] === undefined) {
+      return { valid: false, reason: `Missing required field: ${field}` };
+    }
+  }
+
+  if (manifest.version !== PROTOCOL_VERSION) {
+    return { valid: false, reason: `Version mismatch. Expected ${PROTOCOL_VERSION}, got ${manifest.version}` };
+  }
+
+  return { valid: true };
+}
+
 /**
  * Validates that a parsed JSON object conforms to the TransferPacket schema.
  */
@@ -46,6 +68,23 @@ export function validatePacket(packet: Partial<TransferPacket>): packet is Trans
   }
 
   return true;
+}
+
+export function validatePacketDetailed(packet: Partial<TransferPacket> | null): { valid: boolean; reason?: string } {
+  if (!packet) return { valid: false, reason: "Packet is null or undefined" };
+
+  const requiredFields = [
+    "version", "transferId", "packetId", "index", 
+    "total", "crc32", "payload"
+  ];
+
+  for (const field of requiredFields) {
+    if (packet[field as keyof TransferPacket] === undefined) {
+      return { valid: false, reason: `Missing required field: ${field}` };
+    }
+  }
+
+  return { valid: true };
 }
 
 /**

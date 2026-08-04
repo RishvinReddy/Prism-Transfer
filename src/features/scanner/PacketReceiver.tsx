@@ -4,7 +4,7 @@ import * as React from "react";
 import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
 import { deserializeManifest, deserializePacket } from "@/lib/serializer";
-import { validateManifest, validatePacket } from "@/lib/validator";
+import { validateManifest, validatePacket, validateManifestDetailed, validatePacketDetailed } from "@/lib/validator";
 import { saveManifest, savePacket, getAllPackets, clearTransfer } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
@@ -13,6 +13,7 @@ import { Loader2, CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useSettings } from "@/contexts/settings";
 import { DeveloperDashboard, BenchmarkMetrics } from "@/features/developer/DeveloperDashboard";
+import { ReceiveDebugger, DebugSession, DebugStage } from "./ReceiveDebugger";
 
 export function PacketReceiver() {
   const { settings } = useSettings();
@@ -24,65 +25,137 @@ export function PacketReceiver() {
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
   const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
   const pauseScannerRef = React.useRef<boolean>(false);
+  const [debugSessions, setDebugSessions] = React.useState<DebugSession[]>([]);
+
+  const addDebugSession = (session: DebugSession) => {
+    setDebugSessions(prev => [session, ...prev].slice(0, 50));
+  };
 
   const handleScan = async (decodedText: string) => {
     if (!isScanning || pauseScannerRef.current) return;
     
+    const sessionStart = performance.now();
+    const sessionId = `scan-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+    const stages: DebugStage[] = [];
+    
+    const addStage = (name: string, status: "SUCCESS"|"ERROR"|"SKIPPED", message: string, start?: number) => {
+      stages.push({ name, status, message, durationMs: start ? performance.now() - start : undefined });
+    };
+
+    let finalStatus: "SUCCESS" | "ERROR" | "DROPPED" = "SUCCESS";
+    let rawPreview = decodedText.slice(0, 200);
+    if (decodedText.length > 200) rawPreview += "...";
+
+    addStage("QR_DECODE", "SUCCESS", `Decoded ${decodedText.length} bytes`, sessionStart);
+    
     try {
+      const parseStart = performance.now();
       const parsed = JSON.parse(decodedText);
+      addStage("JSON_PARSE", "SUCCESS", "Valid JSON", parseStart);
+
       const packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId;
       const now = Date.now();
       
-      // Debounce the exact same packet for 200ms
+      const debounceStart = performance.now();
       if (lastScannedRef.current && lastScannedRef.current.id === packetId) {
         if (now - lastScannedRef.current.time < 200) {
-          return; // Ignore completely
+          addStage("DEBOUNCE", "SKIPPED", `Ignored within 200ms window`);
+          finalStatus = "DROPPED";
+          addDebugSession({ id: sessionId, timestamp: now, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
+          return;
         } else {
           tracker.recordDuplicate();
           lastScannedRef.current.time = now;
+          addStage("DEBOUNCE", "SKIPPED", `Counted as duplicate`);
+          finalStatus = "DROPPED";
+          addDebugSession({ id: sessionId, timestamp: now, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
           return;
         }
       }
       
       lastScannedRef.current = { id: packetId, time: now };
+      addStage("DEBOUNCE", "SUCCESS", `Accepted new read for ${packetId || 'unknown'}`, debounceStart);
       
-      // If it has a type field of 'manifest', handle as Manifest
+      const identifyStart = performance.now();
       if (parsed.type === "manifest") {
+        addStage("IDENTIFY_TYPE", "SUCCESS", "Identified as Manifest", identifyStart);
         if (!manifest) {
           delete parsed.type;
-          const m = parsed as TransferManifest;
-          if (validateManifest(m)) {
+          const validateStart = performance.now();
+          const { valid, reason } = validateManifestDetailed(parsed);
+          
+          if (valid) {
+            addStage("VALIDATE_SCHEMA", "SUCCESS", "Manifest matches schema", validateStart);
+            const m = parsed as TransferManifest;
+            const storeStart = performance.now();
             await saveManifest(m);
+            addStage("STORE_PACKET", "SUCCESS", "Manifest saved to IDB", storeStart);
+            
             setManifest(m);
             tracker.resetProgress(m.totalPackets);
-            // Pause scanner briefly after accepting a new manifest
+            addStage("UPDATE_PROGRESS", "SUCCESS", `Expected packets: ${m.totalPackets}`);
+            
             pauseScannerRef.current = true;
             setTimeout(() => { pauseScannerRef.current = false; }, 150);
           } else {
-            console.warn("Manifest failed validation", m);
+            addStage("VALIDATE_SCHEMA", "ERROR", reason || "Unknown schema failure", validateStart);
+            finalStatus = "ERROR";
           }
+        } else {
+          addStage("IDENTIFY_TYPE", "SKIPPED", "Manifest already exists", identifyStart);
+          finalStatus = "DROPPED";
         }
       } else {
-        // Handle as Data Packet
+        addStage("IDENTIFY_TYPE", "SUCCESS", "Identified as Data Packet", identifyStart);
         if (manifest) {
-          const p = parsed as TransferPacket;
-          if (validatePacket(p) && p.transferId === manifest.transferId) {
+          const validateStart = performance.now();
+          const { valid, reason } = validatePacketDetailed(parsed);
+          
+          if (valid && parsed.transferId === manifest.transferId) {
+            addStage("VALIDATE_SCHEMA", "SUCCESS", `Valid packet ${parsed.index}`, validateStart);
+            const p = parsed as TransferPacket;
+            
+            const storeStart = performance.now();
             const isNew = await savePacket(p);
-            tracker.recordPacket(p.index, !isNew);
+            
             if (isNew) {
-              // Pause scanner briefly after accepting a new data packet
+              addStage("STORE_PACKET", "SUCCESS", "Saved new packet to IDB", storeStart);
+              tracker.recordPacket(p.index, false);
+              addStage("UPDATE_PROGRESS", "SUCCESS", `Recorded packet ${p.index}`);
               pauseScannerRef.current = true;
               setTimeout(() => { pauseScannerRef.current = false; }, 150);
+            } else {
+              addStage("STORE_PACKET", "SKIPPED", "Packet already existed in IDB", storeStart);
+              tracker.recordPacket(p.index, true);
+              finalStatus = "DROPPED";
             }
-          } else if (!validatePacket(p)) {
-            console.warn("Packet failed validation", p);
+          } else {
+            if (!valid) {
+              addStage("VALIDATE_SCHEMA", "ERROR", reason || "Unknown schema failure", validateStart);
+            } else {
+              addStage("VALIDATE_SCHEMA", "ERROR", `TransferId mismatch. Expected ${manifest.transferId}`, validateStart);
+            }
+            finalStatus = "ERROR";
           }
+        } else {
+          addStage("VALIDATE_SCHEMA", "ERROR", "Received Data Packet before Manifest", identifyStart);
+          finalStatus = "ERROR";
         }
       }
-    } catch (e) {
-      // Invalid JSON or corrupted frame
+    } catch (e: any) {
+      addStage("JSON_PARSE", "ERROR", e.message || "Unknown JSON parsing error");
       tracker.recordCorruption();
+      finalStatus = "ERROR";
     }
+
+    addDebugSession({
+      id: sessionId,
+      timestamp: Date.now(),
+      stages,
+      rawPayloadPreview: rawPreview,
+      rawPayloadLength: decodedText.length,
+      finalStatus
+    });
   };
 
   React.useEffect(() => {
@@ -206,6 +279,8 @@ export function PacketReceiver() {
           </div>
         )}
       </Card>
+
+      <ReceiveDebugger sessions={debugSessions} />
 
       {settings.developerMode && <DeveloperDashboard metrics={metrics} />}
 
