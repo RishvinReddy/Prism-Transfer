@@ -48,7 +48,7 @@ export const QRGenerator = React.memo(function QRGenerator({
       width={size} 
       height={size} 
       className={className} 
-      style={{ display: "block", maxWidth: "100%", height: "auto", margin: "0 auto" }}
+      style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }}
     />
   );
 });

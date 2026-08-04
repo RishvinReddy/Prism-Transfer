@@ -87,25 +87,22 @@ export function QRPlayer({ frames, manifest, onCancel, initialFps = DEFAULT_FPS 
           <p className="text-lg font-semibold text-foreground truncate px-4">{manifest.filename}</p>
         </div>
 
-        {/* QR Card — always white, device-agnostic */}
+        {/* QR Card — always white, always square */}
         <div 
-          className="w-full max-w-[600px] rounded-3xl shadow-[0_8px_40px_rgba(0,0,0,0.18)] border border-black/8 overflow-hidden"
+          className="w-full max-w-[600px] aspect-square rounded-3xl shadow-[0_8px_40px_rgba(0,0,0,0.18)] border border-black/[0.08] overflow-hidden flex items-center justify-center"
           style={{ background: "#ffffff" }}
         >
-          {/* Quiet zone is provided by the QRCode library (margin:4) + this p-8 padding */}
-          <div className="p-6 md:p-10">
-            {isResetting ? (
-              <div 
-                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 aspect-square"
-                style={{ background: "#f9f9f9" }}
-              >
-                <Clock className="w-8 h-8 mb-4 text-gray-300 animate-pulse" />
-                <span className="font-mono text-sm uppercase tracking-widest text-gray-400 animate-pulse">Sync Pause</span>
-              </div>
-            ) : (
-              <QRGenerator data={frames[currentIndex]} size={1024} />
-            )}
-          </div>
+          {isResetting ? (
+            <div 
+              className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 w-[80%] h-[80%]"
+              style={{ background: "#f9f9f9" }}
+            >
+              <Clock className="w-8 h-8 mb-4 text-gray-300 animate-pulse" />
+              <span className="font-mono text-sm uppercase tracking-widest text-gray-400 animate-pulse">Sync Pause</span>
+            </div>
+          ) : (
+            <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
+          )}
         </div>
       </div>
 
