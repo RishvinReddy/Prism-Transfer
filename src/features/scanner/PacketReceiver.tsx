@@ -254,7 +254,7 @@ export function PacketReceiver() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-2">
               <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40">
                 <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Packets Received</span>
                 <span className="font-mono text-lg text-foreground">{tracker.progress.packetsReceived} <span className="text-muted-foreground text-sm">/ {tracker.progress.totalPackets}</span></span>

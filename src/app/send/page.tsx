@@ -69,7 +69,7 @@ export default function SendPage() {
   }
 
   return (
-    <div className="flex flex-col items-center max-w-2xl mx-auto w-full space-y-8">
+    <div className="flex flex-col items-center max-w-2xl mx-auto w-full px-4 space-y-8">
       <div className="text-center space-y-3 mt-4">
         <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Send File</h1>
         <p className="text-muted-foreground text-sm md:text-base max-w-md mx-auto">
@@ -111,7 +111,7 @@ export default function SendPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                   <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
                     <span className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1"><HardDrive className="w-3 h-3 mr-1"/> Original Size</span>
                     <span className="font-mono text-foreground">{(result.manifest.originalSize / 1024).toFixed(2)} KB</span>
