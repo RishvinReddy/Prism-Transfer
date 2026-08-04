@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Play, Pause, RotateCcw, FastForward, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, RotateCcw, FastForward, SkipBack, SkipForward, Download, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 import { QRGenerator } from "./QRGenerator";
@@ -17,6 +17,7 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [fps, setFps] = React.useState(initialFps);
+  const [epochDuration, setEpochDuration] = React.useState(1000); // Default 1.0s epoch
   const [isResetting, setIsResetting] = React.useState(false);
 
   const totalFrames = frames.length;
@@ -32,7 +33,7 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
             setTimeout(() => {
               setIsResetting(false);
               setCurrentIndex(0);
-            }, 200); // 200ms blank frame reset
+            }, epochDuration); // Epoch loop boundary reset
             return prevIndex; // Hold on current index while resetting, UI handles blanking
           }
           return prevIndex + 1;
@@ -41,12 +42,20 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
     }
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, fps, totalFrames]);
+  }, [isPlaying, fps, epochDuration, totalFrames]);
 
   const handlePlayPause = () => setIsPlaying(!isPlaying);
   const handleRestart = () => setCurrentIndex(0);
   const handlePrev = () => setCurrentIndex((p) => Math.max(0, p - 1));
   const handleNext = () => setCurrentIndex((p) => Math.min(totalFrames - 1, p + 1));
+
+  const handleExport = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(frames, null, 2));
+    const dlAnchorElem = document.createElement("a");
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `simulation-packets.json`);
+    dlAnchorElem.click();
+  };
 
   if (totalFrames === 0) return null;
 
@@ -151,6 +160,46 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
               Fast (20)
             </Button>
           </div>
+        </div>
+
+        <div className="flex flex-col items-center space-y-3 pt-4 border-t border-border/50">
+          <div className="flex items-center space-x-2 text-muted-foreground text-xs font-medium uppercase tracking-wider w-full justify-center">
+            <Clock className="h-3 w-3" />
+            <span>Epoch Loop Pause</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <Button 
+              variant={epochDuration === 500 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setEpochDuration(500)}
+              className="w-full text-xs"
+            >
+              0.5s
+            </Button>
+            <Button 
+              variant={epochDuration === 1000 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setEpochDuration(1000)}
+              className="w-full text-xs"
+            >
+              1.0s
+            </Button>
+            <Button 
+              variant={epochDuration === 1500 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setEpochDuration(1500)}
+              className="w-full text-xs"
+            >
+              1.5s
+            </Button>
+          </div>
+        </div>
+        
+        <div className="pt-2">
+          <Button variant="secondary" className="w-full text-xs" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Simulation Packets
+          </Button>
         </div>
       </div>
     </div>
