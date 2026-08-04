@@ -9,13 +9,13 @@ export function Logo({ className }: { className?: string }) {
   return (
     <Link
       href="/"
-      className={cn("flex items-center gap-2 group", className)}
+      className={cn("flex items-center gap-2 group transition-opacity hover:opacity-80", className)}
     >
-      <div className="relative flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shadow-lg border border-border/50">
-        <img src="/logo.png" alt="PrismTransfer Logo" className="w-full h-full object-cover relative z-10" />
+      <div className="flex items-center justify-center text-primary">
+        <span className="text-2xl leading-none font-sans select-none">◈</span>
       </div>
-      <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
-        Prism<span className="text-primary font-extrabold">Transfer</span>
+      <span className="font-bold text-xl tracking-tight text-foreground">
+        PrismTransfer
       </span>
     </Link>
   );
