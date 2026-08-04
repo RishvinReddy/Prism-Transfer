@@ -1,48 +1,66 @@
 "use client";
 
 import * as React from "react";
-import { Play, Pause, Download, ChevronDown, ChevronRight, Settings2, Square, Clock } from "lucide-react";
+import { Play, Pause, ChevronRight, Settings2, Square, Maximize, Minimize, RefreshCcw, Sun, Clock, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QRGenerator } from "./QRGenerator";
 import { DEFAULT_FPS } from "@/constants/protocol";
 import { useSettings } from "@/contexts/settings";
 import { TransferManifest } from "@/types/transfer";
+import { motion } from "motion/react";
+import { cn } from "@/lib/utils";
 
 export interface QRPlayerProps {
   frames: string[]; 
   manifest: TransferManifest;
   onCancel: () => void;
+  onComplete?: () => void;
+  onLoop?: () => void;
+  totalLoops?: number;
   initialFps?: number;
 }
 
-export function QRPlayer({ frames, manifest, onCancel, initialFps = DEFAULT_FPS }: QRPlayerProps) {
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+export function QRPlayer({ 
+  frames, 
+  manifest, 
+  onCancel, 
+  onComplete,
+  onLoop,
+  totalLoops = 0,
+  initialFps = DEFAULT_FPS 
+}: QRPlayerProps) {
   const { settings } = useSettings();
-  const [isPlaying, setIsPlaying] = React.useState(true); // Auto-play by default in scientific mode
+  const [isPlaying, setIsPlaying] = React.useState(true);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [fps, setFps] = React.useState(initialFps);
   const [epochDuration, setEpochDuration] = React.useState(1000);
   const [isResetting, setIsResetting] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = React.useState(false);
 
   const totalFrames = frames.length;
 
   React.useEffect(() => {
-    console.log({
-      chunkSize: manifest.chunkSize,
-      frameCount: totalFrames,
-      payloadLength: frames[0]?.length || 0,
-    });
-  }, [manifest.chunkSize, totalFrames, frames]);
-
-  React.useEffect(() => {
-    // Esc to cancel
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-      if (e.key === ' ') setIsPlaying(p => !p);
+      if (e.key === 'Escape') {
+        if (isFullscreen) setIsFullscreen(false);
+        else onCancel();
+      }
+      if (e.key === 'f' || e.key === 'F') setIsFullscreen(p => !p);
+      if (e.key === ' ') {
+        e.preventDefault();
+        setIsPlaying(p => !p);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  }, [isFullscreen, onCancel]);
 
   React.useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -52,6 +70,7 @@ export function QRPlayer({ frames, manifest, onCancel, initialFps = DEFAULT_FPS 
         setCurrentIndex((prevIndex) => {
           if (prevIndex >= totalFrames - 1) {
             setIsResetting(true);
+            onLoop?.();
             setTimeout(() => {
               setIsResetting(false);
               setCurrentIndex(0);
@@ -64,109 +83,185 @@ export function QRPlayer({ frames, manifest, onCancel, initialFps = DEFAULT_FPS 
     }
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, fps, epochDuration, totalFrames]);
+  }, [isPlaying, fps, epochDuration, totalFrames, onLoop]);
 
-  const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(frames, null, 2));
-    const dlAnchorElem = document.createElement("a");
-    dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", `simulation-packets.json`);
-    dlAnchorElem.click();
-  };
-
-  if (totalFrames === 0) return null;
+  // Rough simulation of speed
+  const transferSpeed = fps * (manifest.chunkSize / 1024 / 1024); // MB/s
+  const remainingPackets = totalFrames - currentIndex;
+  const etaSec = remainingPackets / fps;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black flex overflow-hidden">
       
-      {/* 
-        The QR Code Area - Scientific Instrument UI
-        Uses exactly 85vmin to be 85% of the shortest viewport dimension.
-      */}
-      <div 
-        className="w-[85vmin] h-[85vmin] bg-white flex items-center justify-center"
-        onClick={() => setIsPlaying(!isPlaying)}
-        style={{ cursor: 'pointer' }}
-      >
-        {isResetting ? (
-          <div className="flex flex-col items-center justify-center text-black">
-            <Clock className="w-12 h-12 mb-4 animate-spin-slow" />
-            <span className="font-mono text-sm uppercase tracking-widest">Sync Pause</span>
-          </div>
-        ) : (
-          <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
-        )}
-      </div>
-
-      {/* Tiny Progress Bar & Minimal Controls Below */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[85vmin] max-w-md flex flex-col space-y-3">
-        <div className="flex items-center space-x-4">
-          <button onClick={() => setIsPlaying(!isPlaying)} className="text-white/50 hover:text-white transition-colors">
-            {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-          </button>
-          
-          <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-white transition-all duration-75 ease-linear"
-              style={{ width: `${((currentIndex + 1) / totalFrames) * 100}%` }}
-            />
-          </div>
-
-          <button onClick={onCancel} className="text-white/50 hover:text-white transition-colors" title="Stop Transfer">
-            <Square className="w-4 h-4 fill-current" />
-          </button>
-        </div>
+      {/* ── Desktop 70/30 Layout | Mobile Vertical Stack ── */}
+      <div className={cn(
+        "flex w-full h-full transition-all duration-500",
+        isFullscreen ? "flex-col" : "flex-col lg:flex-row"
+      )}>
         
-        <div className="flex justify-between items-center text-white/40 text-[10px] font-mono uppercase tracking-widest px-1">
-          <span>{manifest.filename.length > 20 ? manifest.filename.substring(0,20)+'...' : manifest.filename}</span>
-          <span>{currentIndex + 1} / {totalFrames}</span>
+        {/* ── Left Side: The Hero QR Code ── */}
+        <div className={cn(
+          "flex-1 flex flex-col items-center justify-center relative transition-all duration-500",
+          isFullscreen ? "w-full h-full" : "w-full lg:w-[70%] h-[60vh] lg:h-full border-b lg:border-b-0 lg:border-r border-zinc-900"
+        )}>
+          
+          <div 
+            className={cn(
+              "bg-white flex items-center justify-center transition-all duration-300",
+              isFullscreen ? "w-[90vmin] h-[90vmin]" : "w-[85vw] h-[85vw] max-w-[60vh] max-h-[60vh] lg:w-[75vh] lg:h-[75vh]"
+            )}
+            onClick={() => setIsPlaying(!isPlaying)}
+            style={{ cursor: 'pointer' }}
+          >
+            {isResetting ? (
+              <div className="flex flex-col items-center justify-center text-black">
+                <Clock className="w-12 h-12 mb-4 animate-spin-slow" />
+                <span className="font-mono text-sm uppercase tracking-widest">Sync Pause</span>
+              </div>
+            ) : (
+              // Using a massive quiet zone via CSS padding around the generator
+              <div className="w-full h-full p-8 lg:p-12 box-border">
+                <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
+              </div>
+            )}
+          </div>
+
+          {/* Minimal overlay when in Fullscreen */}
+          {isFullscreen && (
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[80vmin] max-w-md flex flex-col space-y-3 opacity-30 hover:opacity-100 transition-opacity">
+              <div className="flex items-center space-x-4">
+                <button onClick={() => setIsPlaying(!isPlaying)} className="text-white hover:text-white transition-colors">
+                  {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+                </button>
+                <div className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-white transition-all duration-75 ease-linear" style={{ width: `${((currentIndex + 1) / totalFrames) * 100}%` }} />
+                </div>
+                <button onClick={() => setIsFullscreen(false)} className="text-white hover:text-white transition-colors">
+                  <Minimize className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex justify-between items-center text-white/70 text-[10px] font-mono uppercase tracking-widest px-1">
+                <span>Packet {currentIndex + 1} / {totalFrames}</span>
+                <span>{totalLoops > 0 ? `Loop ${totalLoops + 1}` : ''}</span>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ── Right Side: Transfer Dashboard ── */}
+        {!isFullscreen && (
+          <div className="w-full lg:w-[30%] h-[40vh] lg:h-full bg-zinc-950 flex flex-col relative overflow-y-auto">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/80 backdrop-blur sticky top-0 z-10">
+              <span className="text-white font-bold text-lg">Transfer Dashboard</span>
+              <Button variant="ghost" size="icon" onClick={() => setIsDevToolsOpen(true)} className="text-zinc-500 hover:text-white">
+                <Settings2 className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* File Info */}
+            <div className="p-6 space-y-8 flex-1">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 text-indigo-400">
+                  <FileIcon className="w-6 h-6" />
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-white font-bold text-lg truncate">{manifest.filename}</span>
+                  <span className="text-zinc-500 text-sm">{formatSize(manifest.originalSize)} • {manifest.mimeType || "Unknown"}</span>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Packets</span>
+                  <span className="text-white font-mono">{currentIndex + 1} <span className="text-zinc-600">/ {totalFrames}</span></span>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Speed</span>
+                  <span className="text-white font-mono">{transferSpeed.toFixed(2)} MB/s</span>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">ETA</span>
+                  <span className="text-white font-mono">{etaSec > 60 ? `${Math.floor(etaSec/60)}m ${Math.floor(etaSec%60)}s` : `${Math.ceil(etaSec)}s`}</span>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Loops</span>
+                  <span className="text-white font-mono">{totalLoops}</span>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-2 pt-4">
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="text-zinc-400">Progress</span>
+                  <span className="text-indigo-400">{Math.round(((currentIndex + 1) / totalFrames) * 100)}%</span>
+                </div>
+                <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="h-full bg-indigo-500" 
+                    style={{ width: `${((currentIndex + 1) / totalFrames) * 100}%` }}
+                    transition={{ duration: 0.1 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Controls */}
+            <div className="p-4 border-t border-zinc-900 bg-zinc-950 grid grid-cols-4 gap-2 pb-8 lg:pb-4">
+              <Button variant="ghost" className="flex flex-col h-16 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900" onClick={() => setIsPlaying(!isPlaying)}>
+                {isPlaying ? <Pause className="w-5 h-5 mb-1" /> : <Play className="w-5 h-5 mb-1" />}
+                <span className="text-[10px] uppercase tracking-wider">{isPlaying ? "Pause" : "Resume"}</span>
+              </Button>
+              <Button variant="ghost" className="flex flex-col h-16 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900" onClick={() => setCurrentIndex(0)}>
+                <RefreshCcw className="w-5 h-5 mb-1" />
+                <span className="text-[10px] uppercase tracking-wider">Restart</span>
+              </Button>
+              <Button variant="ghost" className="flex flex-col h-16 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900" onClick={() => setIsFullscreen(true)}>
+                <Maximize className="w-5 h-5 mb-1" />
+                <span className="text-[10px] uppercase tracking-wider">Expand</span>
+              </Button>
+              <Button variant="ghost" className="flex flex-col h-16 rounded-xl text-red-500/50 hover:text-red-400 hover:bg-red-950/30" onClick={onCancel}>
+                <Square className="w-5 h-5 mb-1" />
+                <span className="text-[10px] uppercase tracking-wider">Stop</span>
+              </Button>
+            </div>
+            
+          </div>
+        )}
+
       </div>
 
-      {/* Developer Tools Toggle (Top Right) */}
-      {settings.developerMode && (
-        <button 
-          onClick={() => setIsDevToolsOpen(!isDevToolsOpen)}
-          className="absolute top-4 right-4 p-2 text-white/30 hover:text-white transition-colors z-50 bg-black/50 rounded-full"
-        >
-          <Settings2 className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* Developer Tools Overlay Panel */}
-      {settings.developerMode && isDevToolsOpen && (
-        <div className="absolute top-16 right-4 w-72 bg-zinc-950 border border-zinc-800 rounded-lg p-4 shadow-2xl z-50 text-zinc-300 font-mono text-xs flex flex-col space-y-4">
-          <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
-            <span className="font-bold text-white uppercase tracking-wider">Dev Tools</span>
-            <button onClick={() => setIsDevToolsOpen(false)}><ChevronRight className="w-4 h-4" /></button>
+      {/* ── Advanced Dev Settings Drawer ── */}
+      {isDevToolsOpen && (
+        <div className="fixed inset-y-0 right-0 w-80 bg-zinc-900 border-l border-zinc-800 shadow-2xl z-50 flex flex-col text-zinc-300 font-mono text-xs">
+          <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+            <span className="font-bold text-white uppercase tracking-wider">Advanced Settings</span>
+            <Button variant="ghost" size="icon" onClick={() => setIsDevToolsOpen(false)} className="h-6 w-6"><ChevronRight className="w-4 h-4" /></Button>
           </div>
-          
-          <div className="space-y-1">
-            <div className="flex justify-between text-zinc-500"><span>Target FPS:</span><span className="text-white">{fps}</span></div>
-            <div className="grid grid-cols-3 gap-1 mt-1">
-              {[10, 15, 30].map(v => (
-                <button key={v} onClick={() => setFps(v)} className={`py-1 rounded ${fps === v ? 'bg-zinc-700 text-white' : 'bg-zinc-900 hover:bg-zinc-800'}`}>{v}</button>
-              ))}
+          <div className="p-4 space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-zinc-500"><span>Target FPS</span><span className="text-white">{fps}</span></div>
+              <div className="grid grid-cols-3 gap-2">
+                {[10, 15, 30].map(v => (
+                  <Button key={v} size="sm" variant={fps === v ? "default" : "outline"} className={fps === v ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" : "bg-zinc-950 border-zinc-800 text-zinc-400"} onClick={() => setFps(v)}>{v}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-zinc-500"><span>Sync Epoch</span><span className="text-white">{epochDuration}ms</span></div>
+              <div className="grid grid-cols-3 gap-2">
+                {[500, 1000, 1500].map(v => (
+                  <Button key={v} size="sm" variant={epochDuration === v ? "default" : "outline"} className={epochDuration === v ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" : "bg-zinc-950 border-zinc-800 text-zinc-400"} onClick={() => setEpochDuration(v)}>{v}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2 pt-4 border-t border-zinc-800">
+              <div className="flex justify-between text-zinc-500"><span>Manual Complete</span></div>
+              <Button size="sm" variant="outline" className="w-full bg-green-950/30 text-green-500 border-green-900/50 hover:bg-green-900/50 hover:text-green-400" onClick={() => { setIsDevToolsOpen(false); onComplete?.(); }}>Trigger Complete Screen</Button>
             </div>
           </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-zinc-500"><span>Sync Epoch:</span><span className="text-white">{epochDuration}ms</span></div>
-            <div className="grid grid-cols-3 gap-1 mt-1">
-              {[500, 1000, 1500].map(v => (
-                <button key={v} onClick={() => setEpochDuration(v)} className={`py-1 rounded ${epochDuration === v ? 'bg-zinc-700 text-white' : 'bg-zinc-900 hover:bg-zinc-800'}`}>{v}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-zinc-800 flex justify-between items-center">
-            <span className="text-zinc-500">Payload:</span>
-            <span className="text-white">{frames[currentIndex]?.length || 0} B</span>
-          </div>
-
-          <button onClick={handleExport} className="w-full flex items-center justify-center py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-white transition-colors">
-            <Download className="w-3 h-3 mr-2" /> Export Array
-          </button>
         </div>
       )}
 
