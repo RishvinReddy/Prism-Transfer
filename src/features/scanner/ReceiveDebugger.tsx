@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Bug, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight } from "lucide-react";
+import { Download, Bug, CheckCircle2, XCircle, Clock, ChevronUp, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 export type DebugStageStatus = "PENDING" | "SUCCESS" | "ERROR" | "SKIPPED";
 
@@ -28,7 +29,7 @@ interface ReceiveDebuggerProps {
 }
 
 export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
-  const [isPanelExpanded, setIsPanelExpanded] = React.useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   const handleExport = () => {
@@ -42,92 +43,126 @@ export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
   if (sessions.length === 0) return null;
 
   return (
-    <Card className="w-full max-w-md bg-black/95 backdrop-blur-xl border-border/50 text-green-400 font-mono text-xs overflow-hidden mt-4 shadow-xl">
-      <div 
-        className="flex justify-between items-center p-3 border-b border-green-900/30 bg-black cursor-pointer hover:bg-black/80 transition-colors"
-        onClick={() => setIsPanelExpanded(!isPanelExpanded)}
-      >
-        <div className="flex items-center space-x-2">
-          {isPanelExpanded ? <ChevronDown className="w-4 h-4 text-green-500" /> : <ChevronRight className="w-4 h-4 text-green-500" />}
-          <Bug className="w-4 h-4 text-green-500" />
-          <span className="font-bold uppercase tracking-wider text-green-500">Developer Diagnostics</span>
-        </div>
-        {isPanelExpanded && (
-          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleExport(); }} className="h-7 text-[10px] border-green-800 text-green-400 hover:bg-green-900/50">
-            <Download className="w-3 h-3 mr-1" /> Export JSON
-          </Button>
-        )}
+    <>
+      {/* Floating Toggle Button */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button 
+          variant="outline" 
+          className="rounded-full shadow-2xl bg-black/80 backdrop-blur-md border-green-900/50 text-green-400 hover:text-green-300 hover:bg-black/90 font-mono text-xs"
+          onClick={() => setIsDrawerOpen(true)}
+        >
+          <Bug className="w-4 h-4 mr-2" /> Developer Diagnostics
+        </Button>
       </div>
 
-      {isPanelExpanded && (
-
-      <div className="flex flex-col h-[400px] overflow-y-auto">
-        {sessions.map((session) => (
-          <div key={session.id} className="border-b border-green-900/30 flex flex-col">
-            <div 
-              className={`flex items-center justify-between p-2 cursor-pointer hover:bg-green-900/20 ${session.finalStatus === 'ERROR' ? 'bg-red-900/10' : ''}`}
-              onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
+      {/* Drawer Overlay */}
+      <AnimatePresence>
+        {isDrawerOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDrawerOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+            />
+            
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-50 flex justify-center"
             >
-              <div className="flex items-center space-x-2 truncate">
-                {session.finalStatus === 'SUCCESS' ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                ) : session.finalStatus === 'ERROR' ? (
-                  <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                ) : (
-                  <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                )}
-                <span className="text-muted-foreground">{new Date(session.timestamp).toLocaleTimeString()}</span>
-                <span className="font-bold truncate">{session.id}</span>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                session.finalStatus === 'SUCCESS' ? 'bg-green-900/50 text-green-400' :
-                session.finalStatus === 'ERROR' ? 'bg-red-900/50 text-red-400' :
-                'bg-yellow-900/50 text-yellow-400'
-              }`}>
-                {session.finalStatus}
-              </span>
-            </div>
-
-            {expandedId === session.id && (
-              <div className="p-3 bg-black/50 space-y-3">
-                {session.rawPayloadLength !== undefined && (
-                  <div className="space-y-1">
-                    <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Payload Preview ({session.rawPayloadLength} bytes)</div>
-                    <div className="bg-green-950/30 p-2 rounded text-green-300 break-all text-[10px]">
-                      {session.rawPayloadPreview}
-                    </div>
+              <Card className="w-full max-w-4xl bg-black/95 backdrop-blur-xl border-t border-border/50 border-l border-r rounded-t-3xl text-green-400 font-mono text-xs shadow-2xl">
+                <div className="flex justify-between items-center p-4 border-b border-green-900/30">
+                  <div className="flex items-center space-x-2">
+                    <Bug className="w-4 h-4 text-green-500" />
+                    <span className="font-bold uppercase tracking-wider text-green-500">Pipeline Debugger</span>
                   </div>
-                )}
-                <div className="space-y-1">
-                  <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Pipeline Execution</div>
-                  {session.stages.map((stage, i) => (
-                    <div key={i} className="flex flex-col border-l-2 border-green-900/50 pl-2 ml-1 py-1">
-                      <div className="flex justify-between items-start">
-                        <span className={`font-bold ${
-                          stage.status === 'ERROR' ? 'text-red-400' :
-                          stage.status === 'SUCCESS' ? 'text-green-400' :
-                          'text-muted-foreground'
+                  <div className="flex items-center space-x-4">
+                    <Button variant="outline" size="sm" onClick={handleExport} className="h-7 text-[10px] border-green-800 text-green-400 hover:bg-green-900/50">
+                      <Download className="w-3 h-3 mr-1" /> Export JSON
+                    </Button>
+                    <button onClick={() => setIsDrawerOpen(false)} className="text-muted-foreground hover:text-white transition-colors">
+                      <ChevronDown className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col h-[60vh] max-h-[600px] overflow-y-auto p-2">
+                  {sessions.map((session) => (
+                    <div key={session.id} className="border-b border-green-900/30 flex flex-col">
+                      <div 
+                        className={`flex items-center justify-between p-3 cursor-pointer hover:bg-green-900/20 rounded-md my-1 ${session.finalStatus === 'ERROR' ? 'bg-red-900/10' : ''}`}
+                        onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
+                      >
+                        <div className="flex items-center space-x-3 truncate">
+                          {session.finalStatus === 'SUCCESS' ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                          ) : session.finalStatus === 'ERROR' ? (
+                            <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                          )}
+                          <span className="text-muted-foreground">{new Date(session.timestamp).toLocaleTimeString()}</span>
+                          <span className="font-bold truncate">{session.id}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          session.finalStatus === 'SUCCESS' ? 'bg-green-900/50 text-green-400' :
+                          session.finalStatus === 'ERROR' ? 'bg-red-900/50 text-red-400' :
+                          'bg-yellow-900/50 text-yellow-400'
                         }`}>
-                          {stage.name}
+                          {session.finalStatus}
                         </span>
-                        {stage.durationMs !== undefined && (
-                          <span className="text-muted-foreground">{stage.durationMs.toFixed(1)}ms</span>
-                        )}
                       </div>
-                      {stage.message && (
-                        <span className={`text-[10px] mt-0.5 ${stage.status === 'ERROR' ? 'text-red-300' : 'text-green-600'}`}>
-                          {stage.message}
-                        </span>
+
+                      {expandedId === session.id && (
+                        <div className="p-4 m-2 bg-black/50 rounded-lg space-y-4 border border-green-900/30">
+                          {session.rawPayloadLength !== undefined && (
+                            <div className="space-y-1">
+                              <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Payload Preview ({session.rawPayloadLength} bytes)</div>
+                              <div className="bg-green-950/30 p-2 rounded text-green-300 break-all text-[10px]">
+                                {session.rawPayloadPreview}
+                              </div>
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Pipeline Execution</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {session.stages.map((stage, i) => (
+                                <div key={i} className="flex flex-col border-l-2 border-green-900/50 pl-3 py-1 bg-green-950/10 rounded-r-md">
+                                  <div className="flex justify-between items-start">
+                                    <span className={`font-bold ${
+                                      stage.status === 'ERROR' ? 'text-red-400' :
+                                      stage.status === 'SUCCESS' ? 'text-green-400' :
+                                      'text-muted-foreground'
+                                    }`}>
+                                      {stage.name}
+                                    </span>
+                                    {stage.durationMs !== undefined && (
+                                      <span className="text-muted-foreground">{stage.durationMs.toFixed(1)}ms</span>
+                                    )}
+                                  </div>
+                                  {stage.message && (
+                                    <span className={`text-[10px] mt-0.5 ${stage.status === 'ERROR' ? 'text-red-300' : 'text-green-600'}`}>
+                                      {stage.message}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      )}
-    </Card>
+              </Card>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

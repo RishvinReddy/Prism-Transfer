@@ -36,18 +36,18 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4 max-w-5xl">
-        <Logo />
+      <div className="container mx-auto flex h-18 md:h-20 items-center justify-between px-6 max-w-5xl">
+        <Logo className="scale-110 origin-left" />
         
         {/* Desktop Navigation */}
-        <div className="hidden md:flex flex-1 items-center justify-end space-x-2">
-          <nav className="flex items-center space-x-6 text-sm font-medium">
+        <div className="hidden md:flex flex-1 items-center justify-end space-x-4">
+          <nav className="flex items-center space-x-8 text-sm font-medium">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "relative transition-colors hover:text-foreground/80 py-1",
+                  "relative transition-colors hover:text-foreground/80 py-2",
                   pathname === item.href
                     ? "text-foreground font-semibold"
                     : "text-foreground/60"
@@ -57,7 +57,7 @@ export function Navbar() {
                 {pathname === item.href && (
                   <motion.div 
                     layoutId="navbar-indicator"
-                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full"
+                    className="absolute -bottom-1 left-0 right-0 h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                   />
                 )}
               </Link>

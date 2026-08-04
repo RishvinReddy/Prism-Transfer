@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "motion/react";
 import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
 import { deserializeManifest, deserializePacket } from "@/lib/serializer";
@@ -204,74 +205,68 @@ export function PacketReceiver() {
 
       <Card className="w-full max-w-md p-6 bg-card/50 backdrop-blur border-border/50 shadow-xl space-y-4">
         {error ? (
-          <div className="text-destructive flex items-center space-x-2">
+          <div className="text-destructive flex items-center justify-center space-x-2 py-8">
             <AlertTriangle className="h-5 w-5" />
             <span className="font-medium text-sm">{error}</span>
           </div>
         ) : isReconstructing ? (
-          <div className="flex items-center space-x-3 text-primary justify-center py-4">
-            <Loader2 className="h-6 w-6 animate-spin" />
+          <div className="flex flex-col items-center space-y-4 text-primary justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin" />
             <span className="font-semibold text-lg">Reconstructing File...</span>
           </div>
         ) : tracker.progress.isComplete ? (
-          <div className="flex flex-col items-center space-y-4 text-success justify-center py-4">
-            <CheckCircle2 className="h-12 w-12 text-success" />
-            <span className="font-bold text-2xl">Transfer Complete</span>
-            <div className="bg-muted p-4 rounded-lg w-full space-y-2 text-sm text-foreground">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">File</span>
-                <span className="font-medium truncate max-w-[150px]">{manifest?.filename}</span>
+          <div className="flex flex-col items-center space-y-4 justify-center py-8">
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.3 }}>
+              <div className="flex items-center space-x-2 text-foreground font-semibold text-xl mb-4">
+                <CheckCircle2 className="h-6 w-6 text-success" />
+                <span>Transfer Complete</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Size</span>
-                <span className="font-medium">{(manifest?.originalSize! / 1024 / 1024).toFixed(2)} MB</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Average Speed</span>
-                <span className="font-medium">{tracker.progress.packetsPerSecond} pkts/sec</span>
-              </div>
+            </motion.div>
+            
+            <div className="text-center space-y-1 w-full">
+              <span className="font-medium text-foreground truncate max-w-[250px] block mx-auto">{manifest?.filename}</span>
+              <span className="text-muted-foreground text-sm">{(manifest?.originalSize! / 1024 / 1024).toFixed(2)} MB</span>
             </div>
-            <p className="text-xs text-muted-foreground">The file has been successfully downloaded.</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="flex justify-between items-end">
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium mb-1">Status</span>
-                <span className="font-semibold text-lg text-foreground leading-none">
-                  {manifest ? manifest.filename : "Waiting for Manifest..."}
-                </span>
-              </div>
-              <span className="text-4xl font-extrabold text-primary tracking-tighter tabular-nums">
-                {tracker.progress.percentage}%
+
+            <div className="flex items-center justify-center w-full my-4">
+              <span className="text-xs px-2 py-1 bg-success/10 text-success rounded-md font-mono flex items-center">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> SHA-256 Verified
               </span>
             </div>
-
-            <div className="h-4 w-full bg-muted/50 rounded-full overflow-hidden border border-border/50">
-              <div
-                className="h-full bg-primary transition-all duration-300 ease-out shadow-[0_0_15px_rgba(99,102,241,0.5)]"
-                style={{ width: `${tracker.progress.percentage}%` }}
-              />
+            
+            <Button className="w-full mt-4 h-12 rounded-xl text-md font-semibold" onClick={() => window.location.reload()}>
+              Done
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col space-y-6 pt-2 pb-4">
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-bold tracking-tight text-primary">Receiving</h2>
+              <p className="text-lg font-semibold text-foreground truncate max-w-[300px] mx-auto">
+                {manifest ? manifest.filename : "Waiting for Manifest..."}
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-2">
-              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Packets Received</span>
-                <span className="font-mono text-lg text-foreground">{tracker.progress.packetsReceived} <span className="text-muted-foreground text-sm">/ {tracker.progress.totalPackets}</span></span>
+            <div className="space-y-3">
+              <div className="h-4 w-full bg-muted/50 rounded-full overflow-hidden border border-border/50">
+                <div
+                  className="h-full bg-primary transition-all duration-300 ease-out shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                  style={{ width: `${tracker.progress.percentage}%` }}
+                />
               </div>
-              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40 text-right">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Speed</span>
-                <span className="font-mono text-lg text-foreground">{tracker.progress.packetsPerSecond} <span className="text-muted-foreground text-sm">pkts/s</span></span>
-              </div>
-              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Duplicates</span>
-                <span className="font-mono text-lg text-foreground">{tracker.progress.duplicateCount}</span>
-              </div>
-              <div className="flex flex-col p-3 bg-muted/20 rounded-xl border border-border/40 text-right">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Corrupted</span>
-                <span className="font-mono text-lg text-destructive">{tracker.progress.corruptedCount}</span>
+
+              <div className="flex justify-between items-center text-muted-foreground text-sm font-medium">
+                <span className="text-primary font-bold text-lg tabular-nums">{tracker.progress.percentage}%</span>
+                <span>{tracker.progress.packetsReceived} / {tracker.progress.totalPackets || "?"}</span>
               </div>
             </div>
+            
+            {manifest && (
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                Remaining <span className="font-mono text-foreground">{tracker.progress.totalPackets - tracker.progress.packetsReceived}</span> packets
+              </div>
+            )}
+
             
             {tracker.progress.missingPackets.length > 0 && tracker.progress.packetsReceived > 0 && (
               <div className="pt-2 border-t border-border/50 text-xs">
@@ -285,7 +280,7 @@ export function PacketReceiver() {
         )}
       </Card>
 
-      <ReceiveDebugger sessions={debugSessions} />
+      {settings.developerMode && <ReceiveDebugger sessions={debugSessions} />}
 
       {settings.developerMode && <DeveloperDashboard metrics={metrics} />}
 

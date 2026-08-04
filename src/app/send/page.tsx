@@ -58,7 +58,7 @@ export default function SendPage() {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="flex flex-col items-center max-w-3xl mx-auto w-full space-y-8 mt-4"
+        className="flex flex-col items-center max-w-4xl mx-auto w-full px-4 space-y-8 mt-4"
       >
         <TransferController 
           transfer={result} 
@@ -69,7 +69,7 @@ export default function SendPage() {
   }
 
   return (
-    <div className="flex flex-col items-center max-w-2xl mx-auto w-full px-4 space-y-8">
+    <div className="flex flex-col items-center max-w-3xl mx-auto w-full px-4 space-y-8">
       <div className="text-center space-y-3 mt-4">
         <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Send File</h1>
         <p className="text-muted-foreground text-sm md:text-base max-w-md mx-auto">
@@ -153,14 +153,24 @@ export default function SendPage() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div className={cn(
-                  "w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-200",
-                  isDragging ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" : "bg-muted text-muted-foreground"
+                  "relative w-32 h-32 mb-6 flex items-center justify-center transition-transform duration-500",
+                  isDragging && "scale-110"
                 )}>
-                  <UploadCloud className="w-8 h-8" />
+                  {/* Subtle decorative background for empty state */}
+                  <div className="absolute inset-0 bg-primary/5 rounded-full blur-2xl" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent rounded-full border border-primary/20" />
+                  
+                  <motion.div 
+                    animate={{ y: [0, -8, 0] }} 
+                    transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                    className="relative z-10 p-4 bg-background rounded-2xl shadow-xl border border-border/50"
+                  >
+                    <UploadCloud className="w-10 h-10 text-primary" />
+                  </motion.div>
                 </div>
-                <h3 className="font-semibold text-lg text-foreground mb-2">Drag & Drop file here</h3>
-                <p className="text-sm text-muted-foreground mb-6 text-center max-w-[250px]">
-                  or click to browse your local file system
+                <h3 className="font-bold text-xl text-foreground mb-2 tracking-tight">Select a file to transfer</h3>
+                <p className="text-sm text-muted-foreground mb-8 text-center max-w-[280px] leading-relaxed">
+                  Drag and drop your file here, or click to browse your local system.
                 </p>
                 <Button variant="secondary" className="rounded-full pointer-events-none">
                   Select File

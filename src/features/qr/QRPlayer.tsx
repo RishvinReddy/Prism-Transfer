@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Play, Pause, RotateCcw, FastForward, SkipBack, SkipForward, Download, Clock } from "lucide-react";
+import { Play, Pause, RotateCcw, FastForward, SkipBack, SkipForward, Download, Clock, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 import { QRGenerator } from "./QRGenerator";
 import { DEFAULT_FPS } from "@/constants/protocol";
 import { Card } from "@/components/ui/card";
+import { useSettings } from "@/contexts/settings";
+import { motion, AnimatePresence } from "motion/react";
 
 export interface QRPlayerProps {
   frames: string[]; // Serialized packets (Manifest + Data)
@@ -14,11 +16,13 @@ export interface QRPlayerProps {
 }
 
 export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
+  const { settings } = useSettings();
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [fps, setFps] = React.useState(initialFps);
-  const [epochDuration, setEpochDuration] = React.useState(1000); // Default 1.0s epoch
+  const [epochDuration, setEpochDuration] = React.useState(1000);
   const [isResetting, setIsResetting] = React.useState(false);
+  const [isDevToolsOpen, setIsDevToolsOpen] = React.useState(false);
 
   const totalFrames = frames.length;
 
@@ -33,8 +37,8 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
             setTimeout(() => {
               setIsResetting(false);
               setCurrentIndex(0);
-            }, epochDuration); // Epoch loop boundary reset
-            return prevIndex; // Hold on current index while resetting, UI handles blanking
+            }, epochDuration);
+            return prevIndex;
           }
           return prevIndex + 1;
         });
@@ -60,148 +64,146 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
   if (totalFrames === 0) return null;
 
   return (
-    <div className="flex flex-col items-center space-y-6 w-full max-w-md mx-auto">
-      <Card className="p-4 bg-white shadow-xl rounded-xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full bg-black/80 backdrop-blur-sm text-white p-3 text-xs flex flex-col z-10 space-y-1">
-          <div className="flex justify-between font-bold items-center">
-            <span className="flex items-center gap-2">PrismTransfer <span className="px-1.5 py-0.5 rounded-sm bg-primary/20 text-primary text-[9px] uppercase tracking-widest font-mono">v1</span></span>
-            <span className="font-mono text-cyan-400">{fps} FPS</span>
-          </div>
-          <div className="flex justify-between text-white/80">
-            <span>Frame {currentIndex + 1} / {totalFrames}</span>
-            <span>{Math.round(((currentIndex + 1) / totalFrames) * 100)}%</span>
-          </div>
-          
-          <div className="mt-1 pt-1 border-t border-white/20 text-[10px] space-y-0.5">
-            <div className="flex justify-between">
-              <span className="text-white/60">Length:</span>
-              <span className="font-mono">{frames[currentIndex]?.length || 0} bytes</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-white/60">Type:</span>
-              <span className="font-mono">{currentIndex === 0 ? "Manifest" : `Packet ${currentIndex}`}</span>
-            </div>
-          </div>
-
-          <div className="w-full bg-white/20 h-1.5 rounded-full mt-1 overflow-hidden">
-            <div 
-              className="bg-indigo-500 h-full transition-all duration-100" 
-              style={{ width: `${((currentIndex + 1) / totalFrames) * 100}%` }}
-            />
-          </div>
+    <div className="flex flex-col items-center space-y-4 w-full mx-auto">
+      
+      {/* Premium Glass Bezel Frame */}
+      <Card className="p-2 md:p-3 bg-black/90 backdrop-blur-xl border border-border/60 shadow-2xl rounded-2xl md:rounded-3xl relative overflow-hidden w-full">
+        {/* Simplified Status Bar */}
+        <div className="flex justify-between items-center text-white/90 px-2 pt-1 pb-2">
+          <span className="font-bold tracking-tight text-sm flex items-center">
+            ◈ PrismTransfer
+          </span>
+          <span className="text-xs font-mono text-white/50">
+            {currentIndex === 0 ? "Manifest" : `Frame ${currentIndex} / ${totalFrames - 1}`}
+          </span>
         </div>
-        <div className="mt-16">
+
+        {/* QR Display Area */}
+        <div className="bg-white rounded-xl md:rounded-2xl overflow-hidden flex items-center justify-center p-4">
           {isResetting ? (
-            <div className="flex items-center justify-center text-muted-foreground w-full h-[320px] bg-black/5 rounded-xl border-2 border-dashed border-border/50">
-               <span className="font-mono text-sm animate-pulse">Restarting transfer...</span>
+            <div className="flex flex-col items-center justify-center text-muted-foreground w-full aspect-square bg-black/5 rounded-xl border-2 border-dashed border-border/50 max-w-[500px]">
+               <Clock className="w-8 h-8 mb-2 animate-pulse text-primary/50" />
+               <span className="font-mono text-xs animate-pulse">Sync Pause...</span>
             </div>
           ) : (
-            <QRGenerator data={frames[currentIndex]} size={320} />
+            <div className="w-full aspect-square max-w-[500px] flex items-center justify-center">
+              <QRGenerator data={frames[currentIndex]} size={1024} />
+            </div>
           )}
         </div>
-      </Card>
 
-      <div className="flex flex-col w-full space-y-4 bg-card/50 backdrop-blur border border-border/50 p-6 rounded-xl">
-        <div className="flex items-center justify-between text-sm font-medium">
-          <span className="text-muted-foreground">Frame {currentIndex + 1} of {totalFrames}</span>
-          <span className="text-primary">{Math.round(((currentIndex + 1) / totalFrames) * 100)}%</span>
-        </div>
-
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+        {/* Clean Progress Bar */}
+        <div className="w-full bg-white/10 h-1.5 rounded-full mt-3 overflow-hidden">
           <div 
-            className="h-full bg-primary transition-all duration-100 ease-linear"
+            className="bg-primary h-full transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(99,102,241,0.5)]" 
             style={{ width: `${((currentIndex + 1) / totalFrames) * 100}%` }}
           />
         </div>
+      </Card>
 
-        <div className="flex items-center justify-center space-x-4 pt-2">
-          <Button variant="outline" size="icon" onClick={handleRestart} title="Restart">
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={handlePrev} disabled={isPlaying || currentIndex === 0}>
-            <SkipBack className="h-4 w-4" />
-          </Button>
-          <Button size="icon" className="h-12 w-12 rounded-full" onClick={handlePlayPause}>
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-1" />}
-          </Button>
-          <Button variant="outline" size="icon" onClick={handleNext} disabled={isPlaying || currentIndex === totalFrames - 1}>
-            <SkipForward className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex flex-col items-center space-y-3 pt-4 border-t border-border/50">
-          <div className="flex items-center space-x-2 text-muted-foreground text-xs font-medium uppercase tracking-wider w-full justify-center">
-            <FastForward className="h-3 w-3" />
-            <span>Playback Speed</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 w-full">
-            <Button 
-              variant={fps === 5 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setFps(5)}
-              className="w-full text-xs"
-            >
-              Slow (5)
-            </Button>
-            <Button 
-              variant={fps === 10 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setFps(10)}
-              className="w-full text-xs"
-            >
-              Normal (10)
-            </Button>
-            <Button 
-              variant={fps === 20 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setFps(20)}
-              className="w-full text-xs"
-            >
-              Fast (20)
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center space-y-3 pt-4 border-t border-border/50">
-          <div className="flex items-center space-x-2 text-muted-foreground text-xs font-medium uppercase tracking-wider w-full justify-center">
-            <Clock className="h-3 w-3" />
-            <span>Epoch Loop Pause</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 w-full">
-            <Button 
-              variant={epochDuration === 500 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setEpochDuration(500)}
-              className="w-full text-xs"
-            >
-              0.5s
-            </Button>
-            <Button 
-              variant={epochDuration === 1000 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setEpochDuration(1000)}
-              className="w-full text-xs"
-            >
-              1.0s
-            </Button>
-            <Button 
-              variant={epochDuration === 1500 ? "default" : "outline"} 
-              size="sm" 
-              onClick={() => setEpochDuration(1500)}
-              className="w-full text-xs"
-            >
-              1.5s
-            </Button>
-          </div>
-        </div>
-        
-        <div className="pt-2">
-          <Button variant="secondary" className="w-full text-xs" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Simulation Packets
-          </Button>
-        </div>
+      {/* Main Controls (Normal Mode) */}
+      <div className="flex items-center justify-center space-x-4">
+        <Button variant="outline" size="icon" onClick={handleRestart} title="Restart" className="rounded-full w-10 h-10 border-border/60">
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+        <Button size="icon" className="h-14 w-14 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all" onClick={handlePlayPause}>
+          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-1" />}
+        </Button>
       </div>
+
+      {/* Developer Tools (Hidden for normal users) */}
+      {settings.developerMode && (
+        <div className="w-full max-w-sm mt-8 border border-border/40 bg-card/30 backdrop-blur-md rounded-2xl overflow-hidden">
+          <button 
+            onClick={() => setIsDevToolsOpen(!isDevToolsOpen)}
+            className="flex items-center justify-between w-full p-4 hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-center space-x-2 text-sm font-semibold">
+              <Settings2 className="w-4 h-4 text-primary" />
+              <span>Developer Tools</span>
+            </div>
+            {isDevToolsOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+          </button>
+          
+          <AnimatePresence>
+            {isDevToolsOpen && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 pt-0 space-y-6 border-t border-border/40 mt-2">
+                  
+                  {/* Step Controls */}
+                  <div className="flex items-center justify-center space-x-2 pt-2">
+                    <Button variant="outline" size="sm" onClick={handlePrev} disabled={isPlaying || currentIndex === 0}>
+                      <SkipBack className="h-4 w-4 mr-1" /> Prev
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleNext} disabled={isPlaying || currentIndex === totalFrames - 1}>
+                      Next <SkipForward className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+
+                  {/* FPS */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <span>Playback Speed</span>
+                      <span className="text-primary">{fps} FPS</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[5, 10, 20].map((v) => (
+                        <Button 
+                          key={v}
+                          variant={fps === v ? "default" : "outline"} 
+                          size="sm" 
+                          onClick={() => setFps(v)}
+                          className="w-full text-xs"
+                        >
+                          {v}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Epoch */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <span>Epoch Pause</span>
+                      <span className="text-primary">{epochDuration / 1000}s</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[500, 1000, 1500].map((v) => (
+                        <Button 
+                          key={v}
+                          variant={epochDuration === v ? "default" : "outline"} 
+                          size="sm" 
+                          onClick={() => setEpochDuration(v)}
+                          className="w-full text-xs"
+                        >
+                          {v / 1000}s
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Diagnostics */}
+                  <div className="pt-2 space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground bg-black/40 p-2 rounded-md font-mono">
+                      <span>Packet Length:</span>
+                      <span className="text-foreground">{frames[currentIndex]?.length || 0} bytes</span>
+                    </div>
+                    <Button variant="secondary" className="w-full text-xs" onClick={handleExport}>
+                      <Download className="h-4 w-4 mr-2" /> Export Packets
+                    </Button>
+                  </div>
+
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
