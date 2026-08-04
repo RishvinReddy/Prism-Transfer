@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Play, Pause, RotateCcw, FastForward, SkipBack, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+
 import { QRGenerator } from "./QRGenerator";
 import { DEFAULT_FPS } from "@/constants/protocol";
 import { Card } from "@/components/ui/card";
@@ -17,18 +17,23 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [fps, setFps] = React.useState(initialFps);
+  const [isResetting, setIsResetting] = React.useState(false);
 
   const totalFrames = frames.length;
 
   React.useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
-    if (isPlaying && totalFrames > 0) {
+    if (isPlaying && totalFrames > 0 && !isResetting) {
       intervalId = setInterval(() => {
         setCurrentIndex((prevIndex) => {
-          // Loop back to start if we hit the end
           if (prevIndex >= totalFrames - 1) {
-            return 0; // Infinite loop until receiver confirms, but for MVP we just loop
+            setIsResetting(true);
+            setTimeout(() => {
+              setIsResetting(false);
+              setCurrentIndex(0);
+            }, 200); // 200ms blank frame reset
+            return prevIndex; // Hold on current index while resetting, UI handles blanking
           }
           return prevIndex + 1;
         });
@@ -65,7 +70,13 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
           </div>
         </div>
         <div className="mt-16">
-          <QRGenerator data={frames[currentIndex]} size={320} />
+          {isResetting ? (
+            <div className="flex items-center justify-center text-muted-foreground w-full h-[320px] bg-black/5 rounded-xl border-2 border-dashed border-border/50">
+               <span className="font-mono text-sm animate-pulse">Restarting transfer...</span>
+            </div>
+          ) : (
+            <QRGenerator data={frames[currentIndex]} size={320} />
+          )}
         </div>
       </Card>
 
@@ -97,17 +108,37 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
           </Button>
         </div>
 
-        <div className="flex items-center space-x-4 pt-4 border-t border-border/50">
-          <FastForward className="h-4 w-4 text-muted-foreground" />
-          <Slider 
-            value={[fps]} 
-            min={1} 
-            max={30} 
-            step={1} 
-            onValueChange={(val) => setFps(Array.isArray(val) ? val[0] : (val as number))}
-            className="flex-1"
-          />
-          <span className="text-sm font-mono w-12 text-right">{fps} fps</span>
+        <div className="flex flex-col items-center space-y-3 pt-4 border-t border-border/50">
+          <div className="flex items-center space-x-2 text-muted-foreground text-xs font-medium uppercase tracking-wider w-full justify-center">
+            <FastForward className="h-3 w-3" />
+            <span>Playback Speed</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <Button 
+              variant={fps === 5 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setFps(5)}
+              className="w-full text-xs"
+            >
+              Slow (5)
+            </Button>
+            <Button 
+              variant={fps === 10 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setFps(10)}
+              className="w-full text-xs"
+            >
+              Normal (10)
+            </Button>
+            <Button 
+              variant={fps === 20 ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setFps(20)}
+              className="w-full text-xs"
+            >
+              Fast (20)
+            </Button>
+          </div>
         </div>
       </div>
     </div>

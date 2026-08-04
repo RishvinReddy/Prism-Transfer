@@ -5,7 +5,7 @@ import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
 import { deserializeManifest, deserializePacket } from "@/lib/serializer";
 import { validateManifest, validatePacket } from "@/lib/validator";
-import { saveManifest, savePacket, getAllPackets } from "@/features/storage/packetStore";
+import { saveManifest, savePacket, getAllPackets, clearTransfer } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,29 @@ export function PacketReceiver() {
   const [error, setError] = React.useState<string | null>(null);
 
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
+  const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
+  const pauseScannerRef = React.useRef<boolean>(false);
 
   const handleScan = async (decodedText: string) => {
+    if (!isScanning || pauseScannerRef.current) return;
+    
     try {
       const parsed = JSON.parse(decodedText);
+      const packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId;
+      const now = Date.now();
+      
+      // Debounce the exact same packet for 200ms
+      if (lastScannedRef.current && lastScannedRef.current.id === packetId) {
+        if (now - lastScannedRef.current.time < 200) {
+          return; // Ignore completely
+        } else {
+          tracker.recordDuplicate();
+          lastScannedRef.current.time = now;
+          return;
+        }
+      }
+      
+      lastScannedRef.current = { id: packetId, time: now };
       
       // If it has a type field of 'manifest', handle as Manifest
       if (parsed.type === "manifest") {
@@ -36,6 +55,9 @@ export function PacketReceiver() {
             await saveManifest(m);
             setManifest(m);
             tracker.resetProgress(m.totalPackets);
+            // Pause scanner briefly after accepting a new manifest
+            pauseScannerRef.current = true;
+            setTimeout(() => { pauseScannerRef.current = false; }, 150);
           } else {
             console.warn("Manifest failed validation", m);
           }
@@ -47,6 +69,11 @@ export function PacketReceiver() {
           if (validatePacket(p) && p.transferId === manifest.transferId) {
             const isNew = await savePacket(p);
             tracker.recordPacket(p.index, !isNew);
+            if (isNew) {
+              // Pause scanner briefly after accepting a new data packet
+              pauseScannerRef.current = true;
+              setTimeout(() => { pauseScannerRef.current = false; }, 150);
+            }
           } else if (!validatePacket(p)) {
             console.warn("Packet failed validation", p);
           }
@@ -68,6 +95,7 @@ export function PacketReceiver() {
           const packets = await getAllPackets(manifest.transferId);
           const blob = await reconstructFile(manifest, packets);
           downloadBlob(blob, manifest.filename);
+          await clearTransfer(manifest.transferId);
         } catch (e) {
           if (e instanceof ReconstructionError) {
             setError(e.message);

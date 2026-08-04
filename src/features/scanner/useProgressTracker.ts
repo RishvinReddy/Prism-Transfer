@@ -66,6 +66,10 @@ export function useProgressTracker(totalPackets: number = 0) {
     setCorruptedCount((prev) => prev + 1);
   }, []);
 
+  const recordDuplicate = useCallback(() => {
+    setDuplicateCount((prev) => prev + 1);
+  }, []);
+
   const resetProgress = useCallback((newTotal: number = 0) => {
     setReceivedIndexes(new Set());
     setDuplicateCount(0);
@@ -108,6 +112,7 @@ export function useProgressTracker(totalPackets: number = 0) {
     progress,
     recordPacket,
     recordCorruption,
+    recordDuplicate,
     resetProgress,
     setInitialReceived,
   };
