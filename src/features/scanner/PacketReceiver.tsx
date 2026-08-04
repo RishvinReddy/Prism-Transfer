@@ -133,6 +133,8 @@ export function PacketReceiver() {
     try {
       const parseStart = performance.now();
       const parsed = JSON.parse(decodedText);
+      console.log("[Protocol] Packet parsed");
+      console.log(parsed);
       addStage("JSON_PARSE", "SUCCESS", "Valid JSON", parseStart);
 
       const packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId;
@@ -170,6 +172,8 @@ export function PacketReceiver() {
             addStage("VALIDATE_SCHEMA", "SUCCESS", "Manifest matches schema", validateStart);
             const m = parsed as TransferManifest;
             await saveManifest(m);
+            console.log("[Receiver] Packet accepted");
+            console.log("[Transfer] Started");
             addStage("STORE_PACKET", "SUCCESS", "Manifest saved to IDB", validateStart);
             setManifest(m);
             tracker.resetProgress(m.totalPackets);
@@ -197,6 +201,7 @@ export function PacketReceiver() {
             const isNew = await savePacket(p);
 
             if (isNew) {
+              console.log("[Receiver] Packet accepted");
               addStage("STORE_PACKET", "SUCCESS", "Saved new packet to IDB", validateStart);
               tracker.recordPacket(p.index, false);
               addStage("UPDATE_PROGRESS", "SUCCESS", `Recorded packet ${p.index}`);

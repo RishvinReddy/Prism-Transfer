@@ -27,6 +27,14 @@ export function QRPlayer({ frames, manifest, onCancel, initialFps = DEFAULT_FPS 
   const totalFrames = frames.length;
 
   React.useEffect(() => {
+    console.log({
+      chunkSize: manifest.chunkSize,
+      frameCount: totalFrames,
+      payloadLength: frames[0]?.length || 0,
+    });
+  }, [manifest.chunkSize, totalFrames, frames]);
+
+  React.useEffect(() => {
     // Esc to cancel
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();

@@ -58,6 +58,7 @@ export function useQRScanner({ onScan, isScanning, targetFps = 30 }: UseQRScanne
           ready: "YES"
         }));
         setIsCameraReady(true);
+        console.log(`[Camera] Ready (${settings.width}x${settings.height})`);
       }
     } catch (err: any) {
       setError(err.message || "Failed to access camera");
@@ -133,8 +134,13 @@ export function useQRScanner({ onScan, isScanning, targetFps = 30 }: UseQRScanne
       }));
 
       if (code) {
+        console.log("[Scanner] QR detected");
+        console.log(code.data);
         setDiagnostics(prev => ({ ...prev, decodedFrames: prev.decodedFrames + 1 }));
         onScanRef.current(code.data);
+      } else {
+        // Log frame captured (maybe throttle this log if needed, but user asked for it)
+        // console.log("[Scanner] Frame captured (No QR)");
       }
     }
 
