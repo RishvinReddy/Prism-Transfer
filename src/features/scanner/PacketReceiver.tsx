@@ -7,7 +7,7 @@ import { deserializeManifest, deserializePacket } from "@/lib/serializer";
 import { validateManifest, validatePacket } from "@/lib/validator";
 import { saveManifest, savePacket, getAllPackets } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
-import { TransferManifest } from "@/types/transfer";
+import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -24,22 +24,32 @@ export function PacketReceiver() {
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
 
   const handleScan = async (decodedText: string) => {
-    // Determine if it's a manifest or packet (Manifests have "filename" in the JSON usually, but let's try-catch)
     try {
-      if (!manifest && decodedText.includes('"filename"')) {
-        // Assume Manifest
-        const m = deserializeManifest(decodedText);
-        if (validateManifest(m)) {
-          await saveManifest(m);
-          setManifest(m);
-          tracker.resetProgress(m.totalPackets);
+      const parsed = JSON.parse(decodedText);
+      
+      // If it has a type field of 'manifest', handle as Manifest
+      if (parsed.type === "manifest") {
+        if (!manifest) {
+          delete parsed.type;
+          const m = parsed as TransferManifest;
+          if (validateManifest(m)) {
+            await saveManifest(m);
+            setManifest(m);
+            tracker.resetProgress(m.totalPackets);
+          } else {
+            console.warn("Manifest failed validation", m);
+          }
         }
-      } else if (manifest) {
-        // Assume Data Packet
-        const p = deserializePacket(decodedText);
-        if (validatePacket(p) && p.transferId === manifest.transferId) {
-          const isNew = await savePacket(p);
-          tracker.recordPacket(p.index, !isNew);
+      } else {
+        // Handle as Data Packet
+        if (manifest) {
+          const p = parsed as TransferPacket;
+          if (validatePacket(p) && p.transferId === manifest.transferId) {
+            const isNew = await savePacket(p);
+            tracker.recordPacket(p.index, !isNew);
+          } else if (!validatePacket(p)) {
+            console.warn("Packet failed validation", p);
+          }
         }
       }
     } catch (e) {
