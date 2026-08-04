@@ -53,23 +53,36 @@ export function Hero() {
   };
 
   return (
-    <section className="relative w-full min-h-[92vh] flex flex-col items-center justify-center px-6 overflow-hidden py-12 md:py-20">
-      {/* Large background gradient blobs */}
-      <div className="absolute top-[-20%] left-[10%] w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
+    <section className="relative w-full min-h-[92vh] flex flex-col items-center justify-center px-6 overflow-hidden py-12 md:py-20 bg-background">
+      {/* Dotted Grid Background with radial spotlight overlay */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-70" 
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0),
+            radial-gradient(ellipse 70% 60% at 50% 0%, rgba(99, 102, 241, 0.12), transparent)
+          `,
+          backgroundSize: "28px 28px, 100% 100%",
+        }}
+      />
       <div className="absolute bottom-[-10%] right-[5%] w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none" />
 
       <div className="relative z-10 max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         {/* Left Column: Text & Actions */}
-        <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left space-y-8">
-          {/* Badge */}
+        <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left space-y-6">
+          {/* Badges Container */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
+            className="flex flex-wrap gap-2.5 justify-center lg:justify-start"
           >
             <span className="inline-flex items-center space-x-2 text-xs font-semibold uppercase tracking-widest text-primary/80 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               <span>Air-Gapped Optical File Sharing</span>
+            </span>
+            <span className="inline-flex items-center space-x-1.5 text-xs font-semibold uppercase tracking-widest text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-full">
+              <span>⚡ peak speed: 45.2 MB/s</span>
             </span>
           </motion.div>
 
@@ -160,13 +173,13 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mt-8 pt-8 border-t border-border/20"
+          className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mt-8 pt-8 border-t border-border/20 z-10"
         >
           {/* Card 1: Interactive Quick Send */}
-          <Card
+          <div
             className={cn(
-              "flex flex-col justify-between p-6 bg-card/40 border border-border/30 rounded-2xl transition-all duration-300 hover:border-indigo-500/40 relative overflow-hidden group cursor-pointer",
-              isDragging && "border-indigo-500 bg-indigo-500/5 shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+              "flex flex-col justify-between p-6 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl transition-all duration-300 hover:border-indigo-500/50 hover:shadow-[0_0_40px_rgba(99,102,241,0.08)] relative overflow-hidden group cursor-pointer",
+              isDragging && "border-indigo-500 bg-indigo-500/5 shadow-[0_0_35px_rgba(99,102,241,0.15)]"
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -179,9 +192,12 @@ export function Hero() {
               onChange={handleFileChange}
               className="hidden"
             />
-            <div className="space-y-4">
+            {/* Spotlight hover effect helper */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+            
+            <div className="space-y-4 relative z-10">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
                   Quick Action
                 </span>
                 <UploadCloud className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
@@ -193,19 +209,22 @@ export function Hero() {
                 </p>
               </div>
             </div>
-            <div className="mt-6 border-2 border-dashed border-border/50 group-hover:border-indigo-500/40 rounded-xl p-4 transition-colors flex items-center justify-center">
+            <div className="mt-6 border border-dashed border-border/50 group-hover:border-indigo-500/40 rounded-xl p-4 transition-colors flex items-center justify-center relative z-10 bg-black/10">
               <span className="text-xs font-semibold text-muted-foreground group-hover:text-indigo-400 transition-colors">
                 {isDragging ? "Drop your file here" : "Browse or Drop File"}
               </span>
             </div>
-          </Card>
+          </div>
 
           {/* Card 2: Quick Receive Portal */}
-          <Link href="/receive">
-            <Card className="flex flex-col justify-between p-6 bg-card/40 border border-border/30 rounded-2xl hover:border-cyan-500/40 transition-all duration-300 relative overflow-hidden group h-full cursor-pointer">
-              <div className="space-y-4">
+          <Link href="/receive" className="h-full">
+            <div className="flex flex-col justify-between p-6 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl hover:border-cyan-500/50 hover:shadow-[0_0_40px_rgba(34,211,238,0.08)] transition-all duration-300 relative overflow-hidden group h-full cursor-pointer">
+              {/* Spotlight hover effect helper */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+              
+              <div className="space-y-4 relative z-10">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20">
                     Receiver
                   </span>
                   <ScanLine className="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" />
@@ -219,12 +238,12 @@ export function Hero() {
               </div>
               
               {/* Mock Viewfinder Scanner UI inside card */}
-              <div className="mt-6 h-20 relative bg-black/30 rounded-xl overflow-hidden flex items-center justify-center border border-border/20 group-hover:border-cyan-500/20 transition-all">
+              <div className="mt-6 h-20 relative bg-black/40 rounded-xl overflow-hidden flex items-center justify-center border border-border/20 group-hover:border-cyan-500/30 transition-all z-10">
                 {/* corner brackets */}
-                <div className="absolute top-2 left-2 w-3.5 h-3.5 border-t border-l border-cyan-400/50 group-hover:border-cyan-400 transition-colors" />
-                <div className="absolute top-2 right-2 w-3.5 h-3.5 border-t border-r border-cyan-400/50 group-hover:border-cyan-400 transition-colors" />
-                <div className="absolute bottom-2 left-2 w-3.5 h-3.5 border-b border-l border-cyan-400/50 group-hover:border-cyan-400 transition-colors" />
-                <div className="absolute bottom-2 right-2 w-3.5 h-3.5 border-b border-r border-cyan-400/50 group-hover:border-cyan-400 transition-colors" />
+                <div className="absolute top-2 left-2 w-3.5 h-3.5 border-t border-l border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors" />
+                <div className="absolute top-2 right-2 w-3.5 h-3.5 border-t border-r border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors" />
+                <div className="absolute bottom-2 left-2 w-3.5 h-3.5 border-b border-l border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors" />
+                <div className="absolute bottom-2 right-2 w-3.5 h-3.5 border-b border-r border-cyan-400/30 group-hover:border-cyan-400/60 transition-colors" />
                 
                 {/* animated scanner target line */}
                 <div className="w-3/4 h-[1px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent absolute top-1/2 -translate-y-1/2 animate-[pulse_2s_infinite]" />
@@ -233,14 +252,17 @@ export function Hero() {
                   Open Scanner
                 </span>
               </div>
-            </Card>
+            </div>
           </Link>
 
           {/* Card 3: Trust Checkbox Sandbox Info */}
-          <Card className="flex flex-col justify-between p-6 bg-card/40 border border-border/30 rounded-2xl transition-all duration-300 relative overflow-hidden group cursor-default h-full">
-            <div className="space-y-4">
+          <div className="flex flex-col justify-between p-6 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl hover:border-emerald-500/50 hover:shadow-[0_0_40px_rgba(16,185,129,0.08)] transition-all duration-300 relative overflow-hidden group cursor-default h-full">
+            {/* Spotlight hover effect helper */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+            
+            <div className="space-y-4 relative z-10">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-green-400 bg-green-500/10 px-2.5 py-1 rounded-full">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-green-400 bg-green-500/10 px-2.5 py-1 rounded-full border border-green-500/20">
                   Security Sandbox
                 </span>
                 <Shield className="w-5 h-5 text-green-400" />
@@ -254,7 +276,7 @@ export function Hero() {
             </div>
             
             {/* mini checkmark list */}
-            <div className="mt-6 space-y-2 text-xs text-muted-foreground text-left">
+            <div className="mt-6 space-y-2 text-xs text-muted-foreground text-left relative z-10 bg-black/10 p-3.5 rounded-xl border border-zinc-800/30">
               {[
                 "100% Serverless file reassembly",
                 "Zero telemetry or network logs",
@@ -266,7 +288,7 @@ export function Hero() {
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
         </motion.div>
     </section>
   );
