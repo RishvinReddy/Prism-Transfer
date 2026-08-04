@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Play, Pause, ChevronRight, Settings2, Square, Maximize, Minimize, RefreshCcw, Sun, Clock, File as FileIcon } from "lucide-react";
+import { Play, Pause, ChevronRight, ChevronDown, Settings2, Square, Maximize, Minimize, RefreshCcw, Sun, Clock, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QRGenerator } from "./QRGenerator";
 import { DEFAULT_FPS } from "@/constants/protocol";
@@ -9,6 +9,7 @@ import { useSettings } from "@/contexts/settings";
 import { TransferManifest } from "@/types/transfer";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { ThroughputGraph } from "./ThroughputGraph";
 
 export interface QRPlayerProps {
   frames: string[]; 
@@ -220,6 +221,16 @@ export function QRPlayer({
                   <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Loops</span>
                   <span className="text-white font-mono">{totalLoops}</span>
                 </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Compression</span>
+                  <span className="text-white font-mono capitalize">{manifest.compressionAlgorithm || "Deflate"}</span>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Hash SHA256</span>
+                  <span className="text-white font-mono text-[10px] truncate" title={manifest.sha256}>
+                    {manifest.sha256 ? `${manifest.sha256.slice(0, 6)}...${manifest.sha256.slice(-4)}` : "—"}
+                  </span>
+                </div>
               </div>
 
               {/* Progress Bar */}
@@ -236,6 +247,25 @@ export function QRPlayer({
                   />
                 </div>
               </div>
+
+              {/* Throughput Graph */}
+              <ThroughputGraph currentSpeed={transferSpeed} />
+
+              {/* Collapsible Advanced Protocol Accordion */}
+              <details className="group border border-zinc-900 rounded-2xl bg-zinc-950/20 overflow-hidden">
+                <summary className="flex justify-between items-center p-4 text-xs font-bold uppercase tracking-wider text-zinc-400 cursor-pointer hover:bg-zinc-900/40 select-none list-none [&::-webkit-details-marker]:hidden">
+                  <span>Protocol Parameters</span>
+                  <ChevronDown className="w-4 h-4 text-zinc-500 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="p-4 pt-0 border-t border-zinc-900/50 space-y-2 text-[10px] font-mono text-zinc-400">
+                  <div className="flex justify-between"><span>Protocol Version</span><span className="text-white font-bold">Optical v{manifest.version || 2}</span></div>
+                  <div className="flex justify-between"><span>Chunk Size</span><span className="text-white font-bold">{manifest.chunkSize} bytes</span></div>
+                  <div className="flex justify-between"><span>EC Level (Redundancy)</span><span className="text-white font-bold">{config.ec} ({config.ec === 'H' ? '30%' : config.ec === 'M' ? '15%' : '7%'})</span></div>
+                  <div className="flex justify-between"><span>CRC32 Validation</span><span className="text-emerald-500 font-bold">Enabled</span></div>
+                  <div className="flex justify-between"><span>Integrity Check</span><span className="text-emerald-500 font-bold">SHA-256</span></div>
+                  <div className="flex justify-between"><span>Compression Level</span><span className="text-white font-bold">Deflate (Level {settings.compressionLevel})</span></div>
+                </div>
+              </details>
 
               {/* Speed Control */}
               <div className="space-y-3 pt-4 border-t border-zinc-900">
