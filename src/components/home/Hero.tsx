@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { GithubIcon } from "./shared";
 import { stageFile } from "@/lib/fileStager";
+import { DataTransferIllustration } from "./DataTransferIllustration";
 
 export function Hero() {
   const router = useRouter();
@@ -57,88 +58,102 @@ export function Hero() {
       <div className="absolute top-[-20%] left-[10%] w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[5%] w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="relative z-10 max-w-5xl mx-auto space-y-12 flex flex-col items-center">
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <span className="inline-flex items-center space-x-2 text-xs font-semibold uppercase tracking-widest text-primary/80 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span>Air-Gapped Optical File Sharing</span>
-          </span>
-        </motion.div>
-
-        {/* Headline */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="space-y-4"
-        >
-          <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight leading-[1.05]">
-            <span className="text-foreground">Transfer Files</span>
-            <br />
-            <span className="text-foreground">Using Nothing</span>
-            <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400">
-              but a Camera.
+      <div className="relative z-10 max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        {/* Left Column: Text & Actions */}
+        <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left space-y-8">
+          {/* Badge */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <span className="inline-flex items-center space-x-2 text-xs font-semibold uppercase tracking-widest text-primary/80 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span>Air-Gapped Optical File Sharing</span>
             </span>
-          </h1>
-        </motion.div>
+          </motion.div>
 
-        {/* Subheading */}
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
-        >
-          PrismTransfer securely moves files between devices using animated QR codes —
-          no internet, no Bluetooth, no cables, and no cloud. Works completely client-side in your browser.
-        </motion.p>
+          {/* Headline */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="space-y-4"
+          >
+            <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] max-w-2xl">
+              <span className="text-foreground">Transfer Files</span>
+              <br />
+              <span className="text-foreground">Using Nothing</span>
+              <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-cyan-400">
+                but a Camera.
+              </span>
+            </h1>
+          </motion.div>
 
-        {/* Main CTA Links */}
+          {/* Subheading */}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-xl leading-relaxed"
+          >
+            PrismTransfer securely moves files between devices using animated QR codes —
+            no internet, no Bluetooth, no cables, and no cloud. Works completely client-side in your browser.
+          </motion.p>
+
+          {/* Main CTA Links */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="flex flex-wrap items-center justify-center lg:justify-start gap-4"
+          >
+            <Link
+              href="/send"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "rounded-full font-bold px-8 h-12 text-sm shadow-[0_0_30px_rgba(99,102,241,0.25)] hover:shadow-[0_0_40px_rgba(99,102,241,0.45)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+              )}
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Send File
+            </Link>
+            <Link
+              href="/receive"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "rounded-full font-bold px-8 h-12 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:scale-[1.02] transition-all"
+              )}
+            >
+              <ScanLine className="w-4 h-4 mr-2" />
+              Receive File
+            </Link>
+            <a
+              href="https://github.com/RishvinReddy/Prism-Transfer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "lg" }),
+                "rounded-full font-semibold px-6 h-12 text-sm text-muted-foreground hover:text-foreground transition-all"
+              )}
+            >
+              <GithubIcon className="w-4 h-4 mr-2" />
+              View Source
+            </a>
+          </motion.div>
+        </div>
+
+        {/* Right Column: Illustration */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="flex flex-wrap items-center justify-center gap-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="lg:col-span-5 w-full flex justify-center items-center"
         >
-          <Link
-            href="/send"
-            className={cn(
-              buttonVariants({ size: "lg" }),
-              "rounded-full font-bold px-8 h-12 text-sm shadow-[0_0_30px_rgba(99,102,241,0.25)] hover:shadow-[0_0_40px_rgba(99,102,241,0.45)] hover:scale-[1.02] active:scale-[0.98] transition-all"
-            )}
-          >
-            <Send className="w-4 h-4 mr-2" />
-            Send File
-          </Link>
-          <Link
-            href="/receive"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "lg" }),
-              "rounded-full font-bold px-8 h-12 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:scale-[1.02] transition-all"
-            )}
-          >
-            <ScanLine className="w-4 h-4 mr-2" />
-            Receive File
-          </Link>
-          <a
-            href="https://github.com/RishvinReddy/Prism-Transfer"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "lg" }),
-              "rounded-full font-semibold px-6 h-12 text-sm text-muted-foreground hover:text-foreground transition-all"
-            )}
-          >
-            <GithubIcon className="w-4 h-4 mr-2" />
-            View Source
-          </a>
+          <DataTransferIllustration />
         </motion.div>
+      </div>
 
         {/* Grid of Micro-Modules / Interactive Cards */}
         <motion.div
@@ -253,7 +268,6 @@ export function Hero() {
             </div>
           </Card>
         </motion.div>
-      </div>
     </section>
   );
 }
