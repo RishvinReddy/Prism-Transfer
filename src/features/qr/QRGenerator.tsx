@@ -3,6 +3,7 @@
 import * as React from "react";
 import QRCode from "qrcode";
 import { DEFAULT_ERROR_CORRECTION } from "@/constants/protocol";
+import { cn } from "@/lib/utils";
 
 export interface QRGeneratorProps {
   data: string;
@@ -47,8 +48,7 @@ export const QRGenerator = React.memo(function QRGenerator({
       ref={canvasRef} 
       width={size} 
       height={size} 
-      className={className} 
-      style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }}
+      className={cn("!w-full !h-full object-contain", className)} 
     />
   );
 });
