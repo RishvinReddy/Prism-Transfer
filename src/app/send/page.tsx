@@ -58,7 +58,7 @@ export default function SendPage() {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="flex flex-col items-center max-w-4xl mx-auto w-full px-4 space-y-8 mt-4"
+        className="flex flex-col items-center max-w-6xl mx-auto w-full px-4 space-y-8 mt-4"
       >
         <TransferController 
           transfer={result} 

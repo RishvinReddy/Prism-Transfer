@@ -33,28 +33,8 @@ export function TransferController({ transfer, onCancel }: TransferControllerPro
   }
 
   return (
-    <div className="flex flex-col items-center space-y-6 w-full relative">
-      <div className="absolute inset-0 bg-primary/5 blur-3xl -z-10 rounded-full w-3/4 h-3/4 mx-auto top-1/2 -translate-y-1/2 pointer-events-none" />
-      
-      <div className="text-center space-y-1 mb-4">
-        <h2 className="text-2xl font-bold tracking-tight text-primary">Sending</h2>
-        <p className="text-xl font-semibold text-foreground">
-          {transfer.manifest.filename}
-        </p>
-        <p className="text-sm text-muted-foreground font-medium">
-          {(transfer.manifest.originalSize / (1024 * 1024)).toFixed(2)} MB • {transfer.manifest.totalPackets + 1} Frames
-        </p>
-      </div>
-
-      <div className="relative p-1 rounded-3xl bg-gradient-to-b from-border/50 to-background shadow-2xl">
-        <div className="p-4 bg-card/60 backdrop-blur-xl rounded-[22px] border border-border/40">
-          <QRPlayer frames={frames} />
-        </div>
-      </div>
-
-      <Button variant="ghost" onClick={onCancel} className="mt-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors rounded-full px-6">
-        Stop Transfer
-      </Button>
+    <div className="w-full relative animate-in fade-in zoom-in-95 duration-300">
+      <QRPlayer frames={frames} manifest={transfer.manifest} onCancel={onCancel} />
     </div>
   );
 }
