@@ -8,6 +8,7 @@ import { Loader2, FileCheck, UploadCloud, Clock, HardDrive, File as FileIcon, La
 import { TransferController } from "@/features/transfer/TransferController";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
+import { getStagedFile } from "@/lib/fileStager";
 
 export default function SendPage() {
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -15,6 +16,13 @@ export default function SendPage() {
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    const staged = getStagedFile();
+    if (staged) {
+      processFile(staged);
+    }
+  }, []);
 
   const processFile = async (file: File) => {
     setIsProcessing(true);
