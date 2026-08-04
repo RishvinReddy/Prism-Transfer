@@ -134,3 +134,16 @@
     @apply font-sans;
   }
 }
+
+@keyframes scan {
+  0%, 100% {
+    transform: translateY(15px);
+  }
+  50% {
+    transform: translateY(265px);
+  }
+}
+
+@utility scan {
+  animation: scan 2s ease-in-out infinite;
+}

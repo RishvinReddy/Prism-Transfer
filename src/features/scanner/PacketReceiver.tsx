@@ -11,6 +11,7 @@ import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useSettings } from "@/contexts/settings";
+import { cn } from "@/lib/utils";
 import { ReceiveDebugger, DebugPacket, DebugStage } from "./ReceiveDebugger";
 import { Loader2, CheckCircle2, AlertTriangle, RefreshCcw, Download, RotateCcw, MonitorSmartphone } from "lucide-react";
 
@@ -218,166 +219,230 @@ export function PacketReceiver() {
   React.useEffect(() => { if (phase === "Receiving Chunks") timestampRef.current = Date.now(); }, [phase]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto flex flex-col space-y-6">
+    <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       
-      {/* ── Top UI: Persistent Scanner Box ── */}
-      <div className="flex flex-col items-center justify-center p-6 bg-card/40 border border-border/30 rounded-3xl space-y-6">
-        <h1 className="text-xl font-bold tracking-tight">Receive Files</h1>
-        
-        <div className="w-full max-w-[280px] aspect-square rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-white/10 relative">
-          {!isTerminal ? (
-            <QRScanner
-              isScanning={isScanning}
-              onScan={handleScan}
-              hasManifest={!!manifest}
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
-              {phase === "Completed" ? (
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-green-500/20 p-4">
-                  <CheckCircle2 className="w-12 h-12 text-green-500" />
-                </motion.div>
-              ) : (
-                <div className="rounded-full bg-red-500/20 p-4">
-                  <AlertTriangle className="w-12 h-12 text-red-500" />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* ── Left Column: Viewfinder / Scanner Lens ── */}
+      <div className="lg:col-span-5 flex flex-col space-y-6">
+        <div className="flex flex-col items-center justify-center p-6 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-3xl relative overflow-hidden group shadow-2xl">
+          {/* Glass glare effect */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none z-20" />
+          
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Viewfinder Scanner</h2>
+          
+          <div className="w-full max-w-[280px] aspect-square rounded-2xl overflow-hidden bg-black shadow-inner ring-1 ring-white/10 relative">
+            {/* Viewfinder Target Brackets */}
+            <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
+            <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
+            <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
+            <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
 
-      {/* ── Status Indicator ── */}
-      <div className="flex items-center justify-between p-4 bg-card/60 backdrop-blur-xl border border-border/30 rounded-2xl">
-        <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Status</span>
-          <div className="flex items-center space-x-2 mt-1">
-            {phase === "Camera Ready" || phase === "QR Detected" ? <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" /> : null}
-            {phase === "Receiving Chunks" ? <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" /> : null}
-            {(phase === "Verifying CRC" || phase === "Reconstructing") ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> : null}
-            {phase === "Completed" ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : null}
-            {phase === "Error" ? <AlertTriangle className="w-4 h-4 text-red-500" /> : null}
-            <span className="font-semibold text-lg">{phase}</span>
+            {/* Glowing scanning laser line */}
+            {phase === "Receiving Chunks" && (
+              <div className="absolute left-[10%] right-[10%] h-[1.5px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent z-30 pointer-events-none animate-[scan_2s_ease-in-out_infinite]" />
+            )}
+
+            {!isTerminal ? (
+              <QRScanner
+                isScanning={isScanning}
+                onScan={handleScan}
+                hasManifest={!!manifest}
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950">
+                {phase === "Completed" ? (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-green-500/10 p-5 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]">
+                    <CheckCircle2 className="w-12 h-12 text-green-500" />
+                  </motion.div>
+                ) : (
+                  <div className="rounded-full bg-red-500/10 p-5 border border-red-500/20 shadow-[0_0_30px_rgba(239,68,68,0.15)]">
+                    <AlertTriangle className="w-12 h-12 text-red-500" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Security / Isolation stats */}
+        <div className="p-5 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl flex flex-col space-y-3">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-green-400">Isolated Network Layer</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Reassembly occurs serverless and client-side. No packets are mirrored, logged, or dispatched over the internet.
+          </p>
+        </div>
       </div>
 
-      {/* ── Transfer Progress (Shows during active transfer) ── */}
-      <AnimatePresence>
-        {manifest && phase !== "Completed" && phase !== "Error" && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="flex flex-col p-5 bg-card/60 backdrop-blur-xl border border-border/30 rounded-2xl space-y-4"
-          >
-            <div className="flex justify-between items-end">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">{manifest.filename}</span>
-                <span className="text-xs text-muted-foreground">{formatSize(manifest.originalSize)}</span>
-              </div>
-              <span className="text-xl font-bold text-primary">{tracker.progress.percentage}%</span>
-            </div>
-            
-            <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden border border-border/30">
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${tracker.progress.percentage}%` }}
-                transition={{ duration: 0.2 }}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Right Column: Control Dashboard & Stats ── */}
+      <div className="lg:col-span-7 flex flex-col space-y-6">
+        
+        {/* Title */}
+        <div className="space-y-1.5">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Receive Files</h1>
+          <p className="text-muted-foreground text-xs md:text-sm">
+            Point your camera at a transmitting PrismTransfer stream to capture manifest and reassemble chunks.
+          </p>
+        </div>
 
-      {/* ── Transfer Stats Bottom Sheet (Visible during active chunking) ── */}
-      <AnimatePresence>
-        {manifest && phase === "Receiving Chunks" && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="grid grid-cols-2 gap-4 p-5 bg-black/40 border border-border/20 rounded-2xl"
-          >
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Packets</span>
-              <span className="font-mono text-sm">{tracker.progress.packetsReceived} / {tracker.progress.totalPackets}</span>
+        {/* Status Indicator */}
+        <div className="flex items-center justify-between p-4 bg-zinc-950/25 backdrop-blur-xl border border-zinc-800/40 rounded-2xl relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent pointer-events-none" />
+          <div className="flex flex-col z-10">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Transfer State</span>
+            <div className="flex items-center space-x-2.5 mt-1.5">
+              {phase === "Camera Ready" || phase === "QR Detected" ? <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" /> : null}
+              {phase === "Receiving Chunks" ? <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" /> : null}
+              {(phase === "Verifying CRC" || phase === "Reconstructing") ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> : null}
+              {phase === "Completed" ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : null}
+              {phase === "Error" ? <AlertTriangle className="w-4 h-4 text-red-500" /> : null}
+              <span className="font-extrabold text-lg text-foreground tracking-tight">{phase}</span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">ETA</span>
-              <span className="font-mono text-sm">{formatETA(tracker.progress.estimatedTimeRemainingMs)}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Duplicates</span>
-              <span className="font-mono text-sm">{tracker.progress.duplicateCount}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">CRC Errors</span>
-              <span className="font-mono text-sm text-red-400">{tracker.progress.corruptedCount}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
 
-      {/* ── Success/Action State ── */}
-      <AnimatePresence>
-        {phase === "Completed" && downloadedBlob && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col p-6 bg-card/60 backdrop-blur-xl border border-green-500/30 rounded-2xl space-y-4"
-          >
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-zinc-900 rounded-xl">
-                <MonitorSmartphone className="w-6 h-6 text-indigo-400" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-bold">{manifest?.filename}</span>
-                <span className="text-sm text-muted-foreground">{formatSize(manifest?.originalSize || 0)}</span>
-              </div>
-            </div>
-            
-            <Button
-              className="w-full h-12 rounded-xl font-bold bg-green-600 hover:bg-green-500 text-white"
-              onClick={() => downloadBlob(downloadedBlob.blob, downloadedBlob.filename)}
+        {/* Transfer Progress (Shows during active transfer) */}
+        <AnimatePresence>
+          {manifest && phase !== "Completed" && phase !== "Error" && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col p-5 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl space-y-4"
             >
-              <Download className="w-5 h-5 mr-2" /> Save to Device
-            </Button>
-            
+              <div className="flex justify-between items-end">
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-foreground">{manifest.filename}</span>
+                  <span className="text-xs text-muted-foreground">{formatSize(manifest.originalSize)}</span>
+                </div>
+                <span className="text-xl font-extrabold text-indigo-400">{tracker.progress.percentage}%</span>
+              </div>
+              
+              <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-zinc-800/40 p-[1px]">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
+                  style={{ width: `${tracker.progress.percentage}%` }}
+                  transition={{ duration: 0.1 }}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Transfer Stats Grid (Visible during active chunking) */}
+        <AnimatePresence>
+          {manifest && phase === "Receiving Chunks" && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 bg-black/20 border border-zinc-800/40 rounded-2xl"
+            >
+              <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Frames</span>
+                <span className="font-mono text-sm font-bold text-foreground mt-0.5">{tracker.progress.packetsReceived} / {tracker.progress.totalPackets}</span>
+              </div>
+              <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">ETA</span>
+                <span className="font-mono text-sm font-bold text-foreground mt-0.5">{formatETA(tracker.progress.estimatedTimeRemainingMs)}</span>
+              </div>
+              <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Duplicates</span>
+                <span className="font-mono text-sm font-bold text-yellow-500 mt-0.5">{tracker.progress.duplicateCount}</span>
+              </div>
+              <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Corruption</span>
+                <span className="font-mono text-sm font-bold text-red-400 mt-0.5">{tracker.progress.corruptedCount}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Real-time debugging validation console */}
+        {phase === "Receiving Chunks" && (
+          <div className="flex flex-col p-4 bg-zinc-950/75 border border-zinc-900 rounded-2xl space-y-1.5 h-44 overflow-y-auto font-mono text-[10px] text-zinc-500">
+            <div className="text-zinc-400 font-bold uppercase tracking-wider text-[8px] pb-1 border-b border-zinc-900/50 flex justify-between items-center mb-1">
+              <span>Active Validation Trace</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            </div>
+            {debugPackets.length === 0 ? (
+              <div className="text-zinc-600 italic">Waiting for incoming optical signal stream...</div>
+            ) : (
+              debugPackets.slice(0, 10).reverse().map((pkt, idx) => (
+                <div key={idx} className="flex justify-between items-center py-0.5 border-b border-zinc-900/10 last:border-0">
+                  <span className={cn(
+                    pkt.finalStatus === "SUCCESS" ? "text-green-400" :
+                    pkt.finalStatus === "ERROR" ? "text-red-400" : "text-yellow-500"
+                  )}>
+                    {pkt.id === "manifest" ? "⚡ [MANIFEST] metadata parsed" : `✓ [FRAME #${pkt.id}] chunk verified`}
+                  </span>
+                  <span className="text-[8px] text-zinc-700">{new Date(pkt.timestamp).toLocaleTimeString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Success/Action State */}
+        <AnimatePresence>
+          {phase === "Completed" && downloadedBlob && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col p-6 bg-zinc-955/20 backdrop-blur-xl border border-green-500/30 rounded-2xl space-y-4 shadow-xl"
+            >
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                  <MonitorSmartphone className="w-6 h-6 text-indigo-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-foreground">{manifest?.filename}</span>
+                  <span className="text-xs text-muted-foreground">{formatSize(manifest?.originalSize || 0)}</span>
+                </div>
+              </div>
+              
+              <Button
+                className="w-full h-12 rounded-xl font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/10 transition-colors"
+                onClick={() => downloadBlob(downloadedBlob.blob, downloadedBlob.filename)}
+              >
+                <Download className="w-5 h-5 mr-2" /> Save to Device
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="w-full h-12 rounded-xl border-zinc-800 hover:bg-zinc-900 transition-colors"
+                onClick={() => window.location.reload()}
+              >
+                Receive Another File
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error State */}
+        {phase === "Error" && (
+          <div className="flex flex-col p-6 bg-red-950/10 border border-red-900/50 rounded-2xl space-y-4">
+            <p className="text-sm text-red-400">{error}</p>
             <Button
-              variant="outline"
+              variant="destructive"
               className="w-full h-12 rounded-xl"
               onClick={() => window.location.reload()}
             >
-              Receive Another File
+              <RotateCcw className="w-4 h-4 mr-2" /> Reset Session
             </Button>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
-      {/* ── Error State ── */}
-      {phase === "Error" && (
-        <div className="flex flex-col p-6 bg-red-950/20 border border-red-900/50 rounded-2xl space-y-4">
-          <p className="text-sm text-red-400">{error}</p>
-          <Button
-            variant="destructive"
-            className="w-full h-12 rounded-xl"
-            onClick={() => window.location.reload()}
-          >
-            <RotateCcw className="w-4 h-4 mr-2" /> Reset Session
-          </Button>
+        {/* Device Info Footer */}
+        <div className="flex justify-between items-center text-xs text-muted-foreground px-1 border-t border-border/10 pt-4 mt-2">
+          <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Optical v2 protocol</span>
+          <span>Session: <span className="font-mono text-zinc-400">{manifest ? "Active" : "Waiting"}</span></span>
         </div>
-      )}
 
-      {/* ── Device Info Footer ── */}
-      <div className="flex justify-between items-center text-xs text-muted-foreground px-4">
-        <div className="flex flex-col">
-          <span>Protocol: <span className="font-mono text-zinc-300">Optical v2</span></span>
-          <span>Session: <span className="font-mono text-zinc-300">{manifest ? "Active" : "Waiting"}</span></span>
-        </div>
       </div>
 
-      {/* ── Developer Tools ── */}
+      {/* Developer Tools */}
       {settings.developerMode && (
         <ReceiveDebugger packets={debugPackets} />
       )}
