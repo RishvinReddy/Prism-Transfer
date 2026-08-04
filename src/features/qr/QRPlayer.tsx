@@ -115,17 +115,20 @@ export function QRPlayer({
             onClick={() => setIsPlaying(!isPlaying)}
             style={{ cursor: 'pointer' }}
           >
-            {isResetting ? (
-              <div className="flex flex-col items-center justify-center text-black">
-                <Clock className="w-12 h-12 mb-4 animate-spin-slow" />
-                <span className="font-mono text-sm uppercase tracking-widest">Sync Pause</span>
-              </div>
-            ) : (
-              // Using a massive quiet zone via CSS padding around the generator
-              <div className="w-full h-full p-6 lg:p-10 box-border">
-                <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
-              </div>
-            )}
+            {/* Always render the QR code to maintain camera tracking and guarantee the last frame is captured */}
+            <div className="w-full h-full p-6 lg:p-10 box-border relative">
+              <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
+              
+              {/* Optional subtle visual indicator for sync pause in developer mode */}
+              {isResetting && settings.developerMode && (
+                <div className="absolute inset-0 bg-black/10 flex items-center justify-center backdrop-blur-[1px] rounded-3xl">
+                  <div className="bg-white/95 text-black px-4 py-2 rounded-xl shadow-lg flex items-center space-x-2 font-mono text-xs font-bold uppercase">
+                    <Clock className="w-4 h-4 animate-spin-slow" />
+                    <span>Sync Pause</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Minimal overlay when in Fullscreen */}
