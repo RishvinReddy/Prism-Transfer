@@ -121,15 +121,18 @@ export function useQRScanner({ onScan, isScanning, targetFps = 30 }: UseQRScanne
     const sx = Math.floor((vw - scanSize) / 2);
     const sy = Math.floor((vh - scanSize) / 2);
 
-    // Set canvas to exactly the crop region size
-    canvas.width = scanSize;
-    canvas.height = scanSize;
+    // Scale down for jsQR performance (max 400x400)
+    const targetSize = Math.min(scanSize, 400);
+
+    // Set canvas to exactly the scaled region size
+    canvas.width = targetSize;
+    canvas.height = targetSize;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     
     if (ctx) {
-      // Draw only the cropped region
-      ctx.drawImage(video, sx, sy, scanSize, scanSize, 0, 0, scanSize, scanSize);
-      const imageData = ctx.getImageData(0, 0, scanSize, scanSize);
+      // Draw only the cropped region, scaling it down if necessary
+      ctx.drawImage(video, sx, sy, scanSize, scanSize, 0, 0, targetSize, targetSize);
+      const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
       
       const decodeStart = performance.now();
       const code = jsQR(imageData.data, imageData.width, imageData.height, {

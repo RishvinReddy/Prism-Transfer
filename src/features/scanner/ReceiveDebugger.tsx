@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Bug, CheckCircle2, XCircle, Clock, ChevronUp, ChevronDown } from "lucide-react";
+import { Download, Bug, CheckCircle2, XCircle, Clock, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export type DebugStageStatus = "PENDING" | "SUCCESS" | "ERROR" | "SKIPPED";
@@ -12,11 +12,10 @@ export interface DebugStage {
   name: string;
   status: DebugStageStatus;
   message: string;
-  durationMs?: number;
 }
 
-export interface DebugSession {
-  id: string;
+export interface DebugPacket {
+  id: string; // usually the packet index or 'manifest'
   timestamp: number;
   stages: DebugStage[];
   rawPayloadPreview?: string;
@@ -25,22 +24,22 @@ export interface DebugSession {
 }
 
 interface ReceiveDebuggerProps {
-  sessions: DebugSession[];
+  packets: DebugPacket[];
 }
 
-export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
+export function ReceiveDebugger({ packets }: ReceiveDebuggerProps) {
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sessions, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(packets, null, 2));
     const dlAnchorElem = document.createElement("a");
     dlAnchorElem.setAttribute("href", dataStr);
     dlAnchorElem.setAttribute("download", `prism-transfer-debug-${Date.now()}.json`);
     dlAnchorElem.click();
   };
 
-  if (sessions.length === 0) return null;
+  if (packets.length === 0) return null;
 
   return (
     <>
@@ -91,48 +90,51 @@ export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
                 </div>
 
                 <div className="flex flex-col h-[60vh] max-h-[600px] overflow-y-auto p-2">
-                  {sessions.map((session) => (
-                    <div key={session.id} className="border-b border-green-900/30 flex flex-col">
+                  {packets.map((packet, idx) => (
+                    <div key={`${packet.id}-${idx}`} className="border-b border-green-900/30 flex flex-col">
                       <div 
-                        className={`flex items-center justify-between p-3 cursor-pointer hover:bg-green-900/20 rounded-md my-1 ${session.finalStatus === 'ERROR' ? 'bg-red-900/10' : ''}`}
-                        onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
+                        className={`flex items-center justify-between p-3 cursor-pointer hover:bg-green-900/20 rounded-md my-1 ${packet.finalStatus === 'ERROR' ? 'bg-red-900/10' : ''}`}
+                        onClick={() => setExpandedId(expandedId === `${packet.id}-${idx}` ? null : `${packet.id}-${idx}`)}
                       >
                         <div className="flex items-center space-x-3 truncate">
-                          {session.finalStatus === 'SUCCESS' ? (
+                          {packet.finalStatus === 'SUCCESS' ? (
                             <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          ) : session.finalStatus === 'ERROR' ? (
+                          ) : packet.finalStatus === 'ERROR' ? (
                             <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
                           ) : (
                             <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />
                           )}
-                          <span className="text-muted-foreground">{new Date(session.timestamp).toLocaleTimeString()}</span>
-                          <span className="font-bold truncate">{session.id}</span>
+                          <span className="text-muted-foreground">{new Date(packet.timestamp).toLocaleTimeString()}</span>
+                          <span className="font-bold truncate">Packet: {packet.id}</span>
                         </div>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          session.finalStatus === 'SUCCESS' ? 'bg-green-900/50 text-green-400' :
-                          session.finalStatus === 'ERROR' ? 'bg-red-900/50 text-red-400' :
+                          packet.finalStatus === 'SUCCESS' ? 'bg-green-900/50 text-green-400' :
+                          packet.finalStatus === 'ERROR' ? 'bg-red-900/50 text-red-400' :
                           'bg-yellow-900/50 text-yellow-400'
                         }`}>
-                          {session.finalStatus}
+                          {packet.finalStatus}
                         </span>
                       </div>
 
-                      {expandedId === session.id && (
+                      {expandedId === `${packet.id}-${idx}` && (
                         <div className="p-4 m-2 bg-black/50 rounded-lg space-y-4 border border-green-900/30">
-                          {session.rawPayloadLength !== undefined && (
+                          {packet.rawPayloadLength !== undefined && (
                             <div className="space-y-1">
-                              <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Payload Preview ({session.rawPayloadLength} bytes)</div>
+                              <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Payload Preview ({packet.rawPayloadLength} bytes)</div>
                               <div className="bg-green-950/30 p-2 rounded text-green-300 break-all text-[10px]">
-                                {session.rawPayloadPreview}
+                                {packet.rawPayloadPreview}
                               </div>
                             </div>
                           )}
                           <div className="space-y-2">
                             <div className="text-muted-foreground uppercase text-[10px] font-bold tracking-wider">Pipeline Execution</div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {session.stages.map((stage, i) => (
-                                <div key={i} className="flex flex-col border-l-2 border-green-900/50 pl-3 py-1 bg-green-950/10 rounded-r-md">
-                                  <div className="flex justify-between items-start">
+                            <div className="flex flex-col space-y-1">
+                              {packet.stages.map((stage, i) => (
+                                <div key={i} className="flex flex-col pl-3 py-1">
+                                  <div className="flex items-center space-x-2">
+                                    {stage.status === 'SUCCESS' && <span className="text-green-500 font-bold">✓</span>}
+                                    {stage.status === 'ERROR' && <span className="text-red-500 font-bold">✗</span>}
+                                    {stage.status === 'SKIPPED' && <span className="text-yellow-500 font-bold">~</span>}
                                     <span className={`font-bold ${
                                       stage.status === 'ERROR' ? 'text-red-400' :
                                       stage.status === 'SUCCESS' ? 'text-green-400' :
@@ -140,12 +142,9 @@ export function ReceiveDebugger({ sessions }: ReceiveDebuggerProps) {
                                     }`}>
                                       {stage.name}
                                     </span>
-                                    {stage.durationMs !== undefined && (
-                                      <span className="text-muted-foreground">{stage.durationMs.toFixed(1)}ms</span>
-                                    )}
                                   </div>
                                   {stage.message && (
-                                    <span className={`text-[10px] mt-0.5 ${stage.status === 'ERROR' ? 'text-red-300' : 'text-green-600'}`}>
+                                    <span className={`text-[10px] ml-4 mt-0.5 ${stage.status === 'ERROR' ? 'text-red-300' : 'text-green-600'}`}>
                                       {stage.message}
                                     </span>
                                   )}

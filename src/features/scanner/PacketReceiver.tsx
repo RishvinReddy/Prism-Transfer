@@ -4,27 +4,27 @@ import * as React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
-import { validateManifestDetailed, validatePacketDetailed } from "@/lib/validator";
+import { validateManifestDetailed, validatePacketDetailed, verifyCRC } from "@/lib/validator";
 import { saveManifest, savePacket, getAllPackets, clearTransfer } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useSettings } from "@/contexts/settings";
-import { DeveloperDashboard, BenchmarkMetrics } from "@/features/developer/DeveloperDashboard";
-import { ReceiveDebugger, DebugSession, DebugStage } from "./ReceiveDebugger";
-import {
-  Loader2, CheckCircle2, AlertTriangle, RefreshCcw, Download, RotateCcw
-} from "lucide-react";
+import { ReceiveDebugger, DebugPacket, DebugStage } from "./ReceiveDebugger";
+import { Loader2, CheckCircle2, AlertTriangle, RefreshCcw, Download, RotateCcw, MonitorSmartphone } from "lucide-react";
 
 // ─── Transfer State Machine ─────────────────────────────────────────────────
-type TransferPhase =
-  | "waiting"       // No manifest received yet
-  | "receiving"     // Manifest received, collecting packets
-  | "reconstructing" // All packets collected, rebuilding file
-  | "verifying"     // SHA check
-  | "complete"      // Done
-  | "error";        // Failure
+export type ReceiverPhase =
+  | "Idle"
+  | "Camera Ready"
+  | "QR Detected"
+  | "Receiving Metadata"
+  | "Receiving Chunks"
+  | "Verifying CRC"
+  | "Reconstructing"
+  | "Completed"
+  | "Error";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -39,463 +39,348 @@ function formatETA(ms: number): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-// Derive scan quality from duplicate rate
-function getScanQuality(duplicates: number, received: number): "excellent" | "good" | "poor" {
-  if (received === 0) return "excellent";
-  const dupRate = duplicates / (received + duplicates);
-  if (dupRate < 0.15) return "excellent";
-  if (dupRate < 0.40) return "good";
-  return "poor";
-}
-
-const qualityLabel: Record<string, string> = {
-  excellent: "Excellent",
-  good: "Good — Minor Frame Loss",
-  poor: "Poor — Move Closer",
-};
-
-const qualityColor: Record<string, string> = {
-  excellent: "#22c55e",
-  good: "#f59e0b",
-  poor: "#ef4444",
-};
-
-// ─── Packet Heatmap (Developer Mode) ─────────────────────────────────────────
-function PacketHeatmap({ total, received, missing }: { total: number; received: Set<number>; missing: number[] }) {
-  const missingSet = new Set(missing);
-  return (
-    <div className="flex flex-wrap gap-[3px]">
-      {Array.from({ length: total }, (_, i) => (
-        <div
-          key={i}
-          title={`Packet ${i}: ${received.has(i) ? "Received" : missingSet.has(i) ? "Missing" : "Pending"}`}
-          className="w-3 h-3 rounded-sm transition-colors duration-200"
-          style={{
-            backgroundColor: received.has(i)
-              ? "#6366f1"
-              : missingSet.has(i)
-              ? "#ef4444"
-              : "#27272a",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Phase Status Labels ──────────────────────────────────────────────────────
-const phaseLabel: Record<TransferPhase, string> = {
-  waiting: "Waiting for sender...",
-  receiving: "Receiving...",
-  reconstructing: "Reconstructing file...",
-  verifying: "Verifying integrity...",
-  complete: "Transfer complete",
-  error: "Transfer failed",
-};
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 export function PacketReceiver() {
   const { settings } = useSettings();
   const [isScanning, setIsScanning] = React.useState(true);
   const [manifest, setManifest] = React.useState<TransferManifest | null>(null);
-  const [phase, setPhase] = React.useState<TransferPhase>("waiting");
+  const [phase, setPhase] = React.useState<ReceiverPhase>("Idle");
   const [error, setError] = React.useState<string | null>(null);
   const [downloadedBlob, setDownloadedBlob] = React.useState<{ blob: Blob; filename: string } | null>(null);
 
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
   const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
   const pauseScannerRef = React.useRef<boolean>(false);
-  const [debugSessions, setDebugSessions] = React.useState<DebugSession[]>([]);
+  const timestampRef = React.useRef(Date.now());
+  const [debugPackets, setDebugPackets] = React.useState<DebugPacket[]>([]);
 
-  const addDebugSession = (session: DebugSession) => {
-    setDebugSessions(prev => [session, ...prev].slice(0, 50));
+  // Update phase to Camera Ready initially
+  React.useEffect(() => {
+    if (phase === "Idle") {
+      setPhase("Camera Ready");
+    }
+  }, [phase]);
+
+  const addDebugPacket = (packet: DebugPacket) => {
+    setDebugPackets(prev => [packet, ...prev].slice(0, 100)); // Keep last 100 packets
   };
-
-  const scanQuality = getScanQuality(tracker.progress.duplicateCount, tracker.progress.packetsReceived);
 
   const handleScan = async (decodedText: string) => {
     if (!isScanning || pauseScannerRef.current) return;
 
-    const sessionStart = performance.now();
-    const sessionId = `scan-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+    if (phase === "Camera Ready") {
+      setPhase("QR Detected");
+    }
+
+    const timestamp = Date.now();
     const stages: DebugStage[] = [];
 
-    const addStage = (name: string, status: "SUCCESS" | "ERROR" | "SKIPPED", message: string, start?: number) => {
-      stages.push({ name, status, message, durationMs: start ? performance.now() - start : undefined });
+    const addStage = (name: string, status: "SUCCESS" | "ERROR" | "SKIPPED", message: string) => {
+      stages.push({ name, status, message });
     };
 
     let finalStatus: "SUCCESS" | "ERROR" | "DROPPED" = "SUCCESS";
-    let rawPreview = decodedText.slice(0, 200);
-    if (decodedText.length > 200) rawPreview += "...";
+    let rawPreview = decodedText.slice(0, 100);
+    if (decodedText.length > 100) rawPreview += "...";
 
-    addStage("QR_DECODE", "SUCCESS", `Decoded ${decodedText.length} bytes`, sessionStart);
+    addStage("QR Decode", "SUCCESS", `Decoded ${decodedText.length} bytes`);
 
+    let packetId = "unknown";
     try {
-      const parseStart = performance.now();
       const parsed = JSON.parse(decodedText);
-      console.log("[Protocol] Packet parsed");
-      console.log(parsed);
-      addStage("JSON_PARSE", "SUCCESS", "Valid JSON", parseStart);
+      packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId || "unknown";
+      addStage("JSON Parse", "SUCCESS", "Valid JSON structure");
 
-      const packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId;
       const now = Date.now();
-
-      const debounceStart = performance.now();
       if (lastScannedRef.current && lastScannedRef.current.id === packetId) {
         if (now - lastScannedRef.current.time < 200) {
-          addStage("DEBOUNCE", "SKIPPED", `Ignored within 200ms window`);
+          addStage("Debounce", "SKIPPED", `Ignored duplicate within 200ms`);
           finalStatus = "DROPPED";
-          addDebugSession({ id: sessionId, timestamp: now, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
+          addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
           return;
         } else {
           tracker.recordDuplicate();
           lastScannedRef.current.time = now;
-          addStage("DEBOUNCE", "SKIPPED", `Counted as duplicate`);
+          addStage("Debounce", "SKIPPED", `Counted as duplicate`);
           finalStatus = "DROPPED";
-          addDebugSession({ id: sessionId, timestamp: now, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
+          addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
           return;
         }
       }
 
       lastScannedRef.current = { id: packetId, time: now };
-      addStage("DEBOUNCE", "SUCCESS", `Accepted new read for ${packetId || "unknown"}`, debounceStart);
+      addStage("Debounce", "SUCCESS", `Accepted new read for ${packetId}`);
 
-      const identifyStart = performance.now();
       if (parsed.type === "manifest") {
-        addStage("IDENTIFY_TYPE", "SUCCESS", "Identified as Manifest", identifyStart);
         if (!manifest) {
+          setPhase("Receiving Metadata");
           delete parsed.type;
-          const validateStart = performance.now();
           const { valid, reason } = validateManifestDetailed(parsed);
 
           if (valid) {
-            addStage("VALIDATE_SCHEMA", "SUCCESS", "Manifest matches schema", validateStart);
+            addStage("Schema Validate", "SUCCESS", "Manifest conforms to schema");
             const m = parsed as TransferManifest;
             await saveManifest(m);
-            console.log("[Receiver] Packet accepted");
-            console.log("[Transfer] Started");
-            addStage("STORE_PACKET", "SUCCESS", "Manifest saved to IDB", validateStart);
+            addStage("Store", "SUCCESS", "Manifest saved to IDB");
+            
             setManifest(m);
             tracker.resetProgress(m.totalPackets);
-            setPhase("receiving");
-            addStage("UPDATE_PROGRESS", "SUCCESS", `Expected packets: ${m.totalPackets}`);
+            setPhase("Receiving Chunks");
+            
             pauseScannerRef.current = true;
-            setTimeout(() => { pauseScannerRef.current = false; }, 150);
+            setTimeout(() => { pauseScannerRef.current = false; }, 100);
           } else {
-            addStage("VALIDATE_SCHEMA", "ERROR", reason || "Unknown schema failure", validateStart);
+            addStage("Schema Validate", "ERROR", reason || "Unknown schema failure");
             finalStatus = "ERROR";
           }
         } else {
-          addStage("IDENTIFY_TYPE", "SKIPPED", "Manifest already exists", identifyStart);
+          addStage("Identify", "SKIPPED", "Manifest already stored");
           finalStatus = "DROPPED";
         }
       } else {
-        addStage("IDENTIFY_TYPE", "SUCCESS", "Identified as Data Packet", identifyStart);
         if (manifest) {
-          const validateStart = performance.now();
           const { valid, reason } = validatePacketDetailed(parsed);
 
           if (valid && parsed.transferId === manifest.transferId) {
-            addStage("VALIDATE_SCHEMA", "SUCCESS", `Valid packet ${parsed.index}`, validateStart);
+            addStage("Schema Validate", "SUCCESS", `Valid packet ${parsed.index}`);
             const p = parsed as TransferPacket;
-            const isNew = await savePacket(p);
-
-            if (isNew) {
-              console.log("[Receiver] Packet accepted");
-              addStage("STORE_PACKET", "SUCCESS", "Saved new packet to IDB", validateStart);
-              tracker.recordPacket(p.index, false);
-              addStage("UPDATE_PROGRESS", "SUCCESS", `Recorded packet ${p.index}`);
-              pauseScannerRef.current = true;
-              setTimeout(() => { pauseScannerRef.current = false; }, 150);
+            
+            // Per-packet CRC validation
+            const crcValid = verifyCRC(p);
+            if (!crcValid) {
+              addStage("CRC Check", "ERROR", `CRC mismatch for packet ${p.index}`);
+              tracker.recordCorruption();
+              finalStatus = "ERROR";
             } else {
-              addStage("STORE_PACKET", "SKIPPED", "Packet already existed in IDB", validateStart);
-              tracker.recordPacket(p.index, true);
-              finalStatus = "DROPPED";
+              addStage("CRC Check", "SUCCESS", "Integrity verified");
+              const isNew = await savePacket(p);
+
+              if (isNew) {
+                addStage("Store", "SUCCESS", "Saved new packet to IDB");
+                tracker.recordPacket(p.index, false);
+                pauseScannerRef.current = true;
+                setTimeout(() => { pauseScannerRef.current = false; }, 50);
+              } else {
+                addStage("Store", "SKIPPED", "Packet already existed in IDB");
+                tracker.recordPacket(p.index, true);
+                finalStatus = "DROPPED";
+              }
             }
           } else {
-            addStage("VALIDATE_SCHEMA", "ERROR", reason || `TransferId mismatch`, validateStart);
+            addStage("Schema Validate", "ERROR", reason || `TransferId mismatch`);
             finalStatus = "ERROR";
           }
         } else {
-          addStage("VALIDATE_SCHEMA", "ERROR", "Received Data Packet before Manifest", identifyStart);
+          addStage("Identify", "ERROR", "Received Data Packet before Manifest");
           finalStatus = "ERROR";
         }
       }
     } catch (e: any) {
-      addStage("JSON_PARSE", "ERROR", e.message || "Unknown JSON parsing error");
+      addStage("JSON Parse", "ERROR", e.message || "Unknown parsing error");
       tracker.recordCorruption();
       finalStatus = "ERROR";
     }
 
-    addDebugSession({ id: sessionId, timestamp: Date.now(), stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
+    addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
   };
 
   // Reconstruction effect
   React.useEffect(() => {
-    if (tracker.progress.isComplete && manifest && phase === "receiving") {
+    if (tracker.progress.isComplete && manifest && phase === "Receiving Chunks") {
       setIsScanning(false);
-      setPhase("reconstructing");
+      setPhase("Verifying CRC"); // We actually do SHA validation here
 
       const run = async () => {
         try {
           const packets = await getAllPackets(manifest.transferId);
-          setPhase("verifying");
-          await new Promise(r => setTimeout(r, 600)); // Brief verifying state for UX
+          setPhase("Reconstructing");
           const blob = await reconstructFile(manifest, packets);
           await clearTransfer(manifest.transferId);
           setDownloadedBlob({ blob, filename: manifest.filename });
-          setPhase("complete");
+          setPhase("Completed");
         } catch (e) {
           setError(e instanceof ReconstructionError ? e.message : "An unknown error occurred.");
-          setPhase("error");
+          setPhase("Error");
         }
       };
 
-      run();
+      // Slight delay for UX
+      setTimeout(run, 500);
     }
   }, [tracker.progress.isComplete, manifest, phase]);
 
-  // Derived metrics for developer dashboard
-  const metrics: BenchmarkMetrics = {
-    transferId: manifest?.transferId,
-    frames: tracker.progress.totalPackets + 1,
-    fps: settings.fps,
-    compressionRatio: manifest ? manifest.compressedSize / manifest.originalSize : 0,
-    averageKbps: 0,
-    duplicatePercentage: tracker.progress.totalPackets > 0 ? (tracker.progress.duplicateCount / tracker.progress.totalPackets) * 100 : 0,
-    missingPercentage: tracker.progress.totalPackets > 0 ? (tracker.progress.missingPackets.length / tracker.progress.totalPackets) * 100 : 0,
-    crcErrors: tracker.progress.corruptedCount,
-    shaStatus: phase === "error" ? "Failed" : phase === "complete" ? "Verified" : "Pending",
-    durationSeconds: tracker.progress.estimatedTimeRemainingMs / 1000 || 0,
-  };
+  const isTerminal = phase === "Completed" || phase === "Error";
 
-  const isTerminal = phase === "complete" || phase === "error";
+  // Compute speed in KB/s
+  const speedKbps = tracker.progress.packetsReceived > 0 
+    ? ((tracker.progress.packetsReceived * (manifest?.chunkSize || 0)) / 1024) / (tracker.progress.estimatedTimeRemainingMs > 0 ? (Date.now() - timestampRef.current) / 1000 : 1)
+    : 0; // rough mock
+    
+  React.useEffect(() => { if (phase === "Receiving Chunks") timestampRef.current = Date.now(); }, [phase]);
 
   return (
-    <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 w-full max-w-6xl mx-auto items-start">
-
-      {/* ── LEFT: Camera ─────────────────────────────────────────── */}
-      <div className="lg:col-span-7 w-full flex flex-col space-y-4">
-        {/* Page header (mobile) */}
-        <div className="lg:hidden text-center space-y-1">
-          <h1 className="text-2xl font-extrabold tracking-tight">Receive File</h1>
-          <p className="text-sm text-muted-foreground">Point your camera at the sender's screen</p>
+    <div className="w-full max-w-2xl mx-auto flex flex-col space-y-6">
+      
+      {/* ── Top UI: Persistent Scanner Box ── */}
+      <div className="flex flex-col items-center justify-center p-6 bg-card/40 border border-border/30 rounded-3xl space-y-6">
+        <h1 className="text-xl font-bold tracking-tight">Receive Files</h1>
+        
+        <div className="w-full max-w-[280px] aspect-square rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-white/10 relative">
+          {!isTerminal ? (
+            <QRScanner
+              isScanning={isScanning}
+              onScan={handleScan}
+              hasManifest={!!manifest}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
+              {phase === "Completed" ? (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-green-500/20 p-4">
+                  <CheckCircle2 className="w-12 h-12 text-green-500" />
+                </motion.div>
+              ) : (
+                <div className="rounded-full bg-red-500/20 p-4">
+                  <AlertTriangle className="w-12 h-12 text-red-500" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
-
-        {!isTerminal ? (
-          <QRScanner
-            isScanning={isScanning}
-            onScan={handleScan}
-            hasManifest={!!manifest}
-            scanQuality={manifest ? scanQuality : undefined}
-          />
-        ) : (
-          // Success / Error illustration replaces camera
-          <div className="w-full max-w-md mx-auto aspect-square rounded-2xl bg-card/60 border border-border/30 flex flex-col items-center justify-center space-y-4">
-            {phase === "complete" ? (
-              <motion.div
-                className="flex flex-col items-center space-y-4"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              >
-                <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: "rgba(34,197,94,0.1)" }}>
-                  <CheckCircle2 className="w-10 h-10 text-green-500" />
-                </div>
-                <span className="font-bold text-xl text-foreground">Transfer Complete</span>
-              </motion.div>
-            ) : (
-              <div className="flex flex-col items-center space-y-4">
-                <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="w-10 h-10 text-destructive" />
-                </div>
-                <span className="font-semibold text-foreground">Transfer Failed</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Scan guidance hint */}
-        {phase === "waiting" && (
-          <motion.p
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center text-sm text-muted-foreground"
-          >
-            Hold the sender's screen inside the frame and keep both devices steady.
-          </motion.p>
-        )}
       </div>
 
-      {/* ── RIGHT: Status & Summary ───────────────────────────────── */}
-      <div className="lg:col-span-5 w-full flex flex-col space-y-5">
-
-        {/* Desktop heading */}
-        <div className="hidden lg:block space-y-1">
-          <h1 className="text-3xl font-extrabold tracking-tight">Receive File</h1>
-        </div>
-
-        {/* ── Status Card ──────────────────────────────── */}
-        <Card className="w-full bg-card/60 backdrop-blur-xl border border-border/30 rounded-2xl overflow-hidden">
-          <div className="p-6 space-y-5">
-
-            {/* Phase indicator */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</span>
-                {phase === "receiving" && scanQuality && (
-                  <span
-                    className="text-xs flex items-center space-x-1.5 font-medium"
-                    style={{ color: qualityColor[scanQuality] }}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full inline-block"
-                      style={{ backgroundColor: qualityColor[scanQuality], boxShadow: `0 0 6px ${qualityColor[scanQuality]}` }}
-                    />
-                    <span>{qualityLabel[scanQuality]}</span>
-                  </span>
-                )}
-              </div>
-
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={phase}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex items-center space-x-3"
-                >
-                  {(phase === "reconstructing" || phase === "verifying") && (
-                    <Loader2 className="w-5 h-5 text-primary animate-spin flex-shrink-0" />
-                  )}
-                  {phase === "complete" && <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />}
-                  {phase === "error" && <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />}
-                  <span className="font-semibold text-lg text-foreground">{phaseLabel[phase]}</span>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* File info (once manifest received) */}
-            {manifest && (
-              <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm border-t border-border/30 pt-5">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-muted-foreground">File</span>
-                  <span className="font-medium text-foreground truncate" title={manifest.filename}>{manifest.filename}</span>
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <span className="text-muted-foreground">Size</span>
-                  <span className="font-medium text-foreground">{formatSize(manifest.originalSize)}</span>
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <span className="text-muted-foreground">Packets</span>
-                  <span className="font-mono text-foreground">
-                    {tracker.progress.packetsReceived} / {tracker.progress.totalPackets}
-                  </span>
-                </div>
-                <div className="flex flex-col space-y-1">
-                  <span className="text-muted-foreground">ETA</span>
-                  <span className="font-mono text-foreground">{formatETA(tracker.progress.estimatedTimeRemainingMs)}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Progress bar (only during receiving) */}
-            {(phase === "receiving" || phase === "reconstructing" || phase === "verifying") && manifest && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground font-medium">
-                  <span>Progress</span>
-                  <span className="text-primary font-bold">{tracker.progress.percentage}%</span>
-                </div>
-                <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden border border-border/30">
-                  <motion.div
-                    className="h-full rounded-full bg-primary shadow-[0_0_12px_rgba(99,102,241,0.5)]"
-                    style={{ width: `${tracker.progress.percentage}%` }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* SHA-256 Verified badge (complete state) */}
-            {phase === "complete" && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center space-x-2 py-2 px-3 rounded-lg"
-                style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
-              >
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                <span className="text-sm font-mono text-green-400">SHA-256 Verified</span>
-              </motion.div>
-            )}
-
-            {/* Error message */}
-            {phase === "error" && error && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/20">
-                {error}
-              </div>
-            )}
+      {/* ── Status Indicator ── */}
+      <div className="flex items-center justify-between p-4 bg-card/60 backdrop-blur-xl border border-border/30 rounded-2xl">
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Status</span>
+          <div className="flex items-center space-x-2 mt-1">
+            {phase === "Camera Ready" || phase === "QR Detected" ? <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" /> : null}
+            {phase === "Receiving Chunks" ? <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" /> : null}
+            {(phase === "Verifying CRC" || phase === "Reconstructing") ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> : null}
+            {phase === "Completed" ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : null}
+            {phase === "Error" ? <AlertTriangle className="w-4 h-4 text-red-500" /> : null}
+            <span className="font-semibold text-lg">{phase}</span>
           </div>
-        </Card>
+        </div>
+      </div>
 
-        {/* ── Packet Heatmap (Developer Mode) ─────────── */}
-        {settings.developerMode && manifest && tracker.progress.totalPackets > 0 && tracker.progress.totalPackets <= 200 && (
-          <Card className="w-full bg-card/40 border border-border/30 rounded-2xl p-4 space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Packet Heatmap</span>
-            <PacketHeatmap
-              total={tracker.progress.totalPackets}
-              received={tracker.progress.receivedIndexes}
-              missing={tracker.progress.missingPackets}
-            />
-            <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-              <span className="flex items-center space-x-1"><span className="w-3 h-3 rounded-sm bg-indigo-500 inline-block" /> Received</span>
-              <span className="flex items-center space-x-1"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Missing</span>
-              <span className="flex items-center space-x-1"><span className="w-3 h-3 rounded-sm bg-zinc-700 inline-block" /> Pending</span>
+      {/* ── Transfer Progress (Shows during active transfer) ── */}
+      <AnimatePresence>
+        {manifest && phase !== "Completed" && phase !== "Error" && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-col p-5 bg-card/60 backdrop-blur-xl border border-border/30 rounded-2xl space-y-4"
+          >
+            <div className="flex justify-between items-end">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">{manifest.filename}</span>
+                <span className="text-xs text-muted-foreground">{formatSize(manifest.originalSize)}</span>
+              </div>
+              <span className="text-xl font-bold text-primary">{tracker.progress.percentage}%</span>
             </div>
-          </Card>
+            
+            <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden border border-border/30">
+              <motion.div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${tracker.progress.percentage}%` }}
+                transition={{ duration: 0.2 }}
+              />
+            </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* ── Action Buttons ───────────────────────────── */}
-        <div className="flex flex-col space-y-3">
-          {phase === "complete" && downloadedBlob && (
+      {/* ── Transfer Stats Bottom Sheet (Visible during active chunking) ── */}
+      <AnimatePresence>
+        {manifest && phase === "Receiving Chunks" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="grid grid-cols-2 gap-4 p-5 bg-black/40 border border-border/20 rounded-2xl"
+          >
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Packets</span>
+              <span className="font-mono text-sm">{tracker.progress.packetsReceived} / {tracker.progress.totalPackets}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">ETA</span>
+              <span className="font-mono text-sm">{formatETA(tracker.progress.estimatedTimeRemainingMs)}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Duplicates</span>
+              <span className="font-mono text-sm">{tracker.progress.duplicateCount}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">CRC Errors</span>
+              <span className="font-mono text-sm text-red-400">{tracker.progress.corruptedCount}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Success/Action State ── */}
+      <AnimatePresence>
+        {phase === "Completed" && downloadedBlob && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col p-6 bg-card/60 backdrop-blur-xl border border-green-500/30 rounded-2xl space-y-4"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-zinc-900 rounded-xl">
+                <MonitorSmartphone className="w-6 h-6 text-indigo-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-bold">{manifest?.filename}</span>
+                <span className="text-sm text-muted-foreground">{formatSize(manifest?.originalSize || 0)}</span>
+              </div>
+            </div>
+            
             <Button
-              className="w-full h-14 rounded-2xl font-bold text-base shadow-[0_4px_14px_0_rgba(99,102,241,0.39)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="w-full h-12 rounded-xl font-bold bg-green-600 hover:bg-green-500 text-white"
               onClick={() => downloadBlob(downloadedBlob.blob, downloadedBlob.filename)}
             >
-              <Download className="w-5 h-5 mr-2" /> Download {manifest?.filename}
+              <Download className="w-5 h-5 mr-2" /> Save to Device
             </Button>
-          )}
-
-          {(phase === "complete" || phase === "error") && (
+            
             <Button
               variant="outline"
-              className="w-full h-12 rounded-2xl font-medium border-border/40"
+              className="w-full h-12 rounded-xl"
               onClick={() => window.location.reload()}
             >
-              <RotateCcw className="w-4 h-4 mr-2" /> New Transfer
+              Receive Another File
             </Button>
-          )}
-
-          {phase === "receiving" && (
-            <Button
-              variant="ghost"
-              onClick={() => setIsScanning(prev => !prev)}
-              className="w-full h-12 rounded-2xl text-muted-foreground hover:text-foreground hover:bg-muted/30"
-            >
-              {isScanning ? "Pause Scanner" : "Resume Scanner"}
-            </Button>
-          )}
-        </div>
-
-        {/* ── Developer Tools ───────────────────────────── */}
-        {settings.developerMode && (
-          <div className="space-y-3">
-            <ReceiveDebugger sessions={debugSessions} />
-            <DeveloperDashboard metrics={metrics} />
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ── Error State ── */}
+      {phase === "Error" && (
+        <div className="flex flex-col p-6 bg-red-950/20 border border-red-900/50 rounded-2xl space-y-4">
+          <p className="text-sm text-red-400">{error}</p>
+          <Button
+            variant="destructive"
+            className="w-full h-12 rounded-xl"
+            onClick={() => window.location.reload()}
+          >
+            <RotateCcw className="w-4 h-4 mr-2" /> Reset Session
+          </Button>
+        </div>
+      )}
+
+      {/* ── Device Info Footer ── */}
+      <div className="flex justify-between items-center text-xs text-muted-foreground px-4">
+        <div className="flex flex-col">
+          <span>Protocol: <span className="font-mono text-zinc-300">Optical v2</span></span>
+          <span>Session: <span className="font-mono text-zinc-300">{manifest ? "Active" : "Waiting"}</span></span>
+        </div>
       </div>
+
+      {/* ── Developer Tools ── */}
+      {settings.developerMode && (
+        <ReceiveDebugger packets={debugPackets} />
+      )}
     </div>
   );
 }
