@@ -59,7 +59,6 @@ export function QRPlayer({
   const [epochDuration, setEpochDuration] = React.useState(1000);
   const [isResetting, setIsResetting] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [isDevToolsOpen, setIsDevToolsOpen] = React.useState(false);
 
   React.useEffect(() => {
     setFps(config.fps);
@@ -186,9 +185,6 @@ export function QRPlayer({
             {/* Header */}
             <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/80 backdrop-blur sticky top-0 z-10">
               <span className="text-white font-bold text-lg">Transfer Dashboard</span>
-              <Button variant="ghost" size="icon" onClick={() => setIsDevToolsOpen(true)} className="text-zinc-500 hover:text-white">
-                <Settings2 className="w-5 h-5" />
-              </Button>
             </div>
 
             {/* File Info */}
@@ -251,19 +247,68 @@ export function QRPlayer({
               {/* Throughput Graph */}
               <ThroughputGraph currentSpeed={transferSpeed} />
 
-              {/* Collapsible Advanced Protocol Accordion */}
-              <details className="group border border-zinc-900 rounded-2xl bg-zinc-950/20 overflow-hidden">
+              {/* Collapsible Advanced Protocol & Controls Accordion */}
+              <details className="group border border-zinc-900 rounded-2xl bg-zinc-950/20 overflow-hidden" open={settings.developerMode}>
                 <summary className="flex justify-between items-center p-4 text-xs font-bold uppercase tracking-wider text-zinc-400 cursor-pointer hover:bg-zinc-900/40 select-none list-none [&::-webkit-details-marker]:hidden">
-                  <span>Protocol Parameters</span>
+                  <span>Advanced Settings</span>
                   <ChevronDown className="w-4 h-4 text-zinc-500 group-open:rotate-180 transition-transform" />
                 </summary>
-                <div className="p-4 pt-0 border-t border-zinc-900/50 space-y-2 text-[10px] font-mono text-zinc-400">
-                  <div className="flex justify-between"><span>Protocol Version</span><span className="text-white font-bold">Optical v{manifest.version || 2}</span></div>
-                  <div className="flex justify-between"><span>Chunk Size</span><span className="text-white font-bold">{manifest.chunkSize} bytes</span></div>
-                  <div className="flex justify-between"><span>EC Level (Redundancy)</span><span className="text-white font-bold">{config.ec} ({config.ec === 'H' ? '30%' : config.ec === 'M' ? '15%' : '7%'})</span></div>
-                  <div className="flex justify-between"><span>CRC32 Validation</span><span className="text-emerald-500 font-bold">Enabled</span></div>
-                  <div className="flex justify-between"><span>Integrity Check</span><span className="text-emerald-500 font-bold">SHA-256</span></div>
-                  <div className="flex justify-between"><span>Compression Level</span><span className="text-white font-bold">Deflate (Level {settings.compressionLevel})</span></div>
+                <div className="p-4 pt-0 border-t border-zinc-900/50 space-y-4 text-xs font-mono text-zinc-400">
+                  
+                  {/* Interactive: Sync Epoch */}
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                      <span>Sync Epoch</span>
+                      <span className="text-white font-mono">{epochDuration}ms</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[500, 1000, 1500].map(v => (
+                        <Button 
+                          key={v} 
+                          size="sm" 
+                          variant={epochDuration === v ? "default" : "outline"} 
+                          className={cn(
+                            "h-7 text-[10px] font-mono rounded-md",
+                            epochDuration === v 
+                              ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" 
+                              : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                          )}
+                          onClick={() => setEpochDuration(v)}
+                        >
+                          {v}ms
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Interactive: Manual Complete */}
+                  <div className="space-y-1.5 pt-2 border-t border-zinc-900/50">
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                      <span>Manual Override</span>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="w-full h-8 text-[10px] bg-green-950/20 text-green-500 border-green-900/30 hover:bg-green-900/30 hover:text-green-400" 
+                      onClick={() => onComplete?.()}
+                    >
+                      Trigger Complete Screen
+                    </Button>
+                  </div>
+
+                  {/* Read-Only Parameters */}
+                  <div className="space-y-2 pt-4 border-t border-zinc-900/50 text-[10px]">
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500 mb-1">
+                      <span>Protocol Details</span>
+                    </div>
+                    <div className="flex justify-between"><span>Protocol Version</span><span className="text-white font-bold">Optical v{manifest.version || 2}</span></div>
+                    <div className="flex justify-between"><span>Chunk Size</span><span className="text-white font-bold">{manifest.chunkSize} bytes</span></div>
+                    <div className="flex justify-between"><span>EC Level (Redundancy)</span><span className="text-white font-bold">{config.ec} ({config.ec === 'H' ? '30%' : config.ec === 'M' ? '15%' : '7%'})</span></div>
+                    <div className="flex justify-between"><span>CRC32 Validation</span><span className="text-emerald-500 font-bold">Enabled</span></div>
+                    <div className="flex justify-between"><span>Integrity Check</span><span className="text-emerald-500 font-bold">SHA-256</span></div>
+                    <div className="flex justify-between"><span>Compression Level</span><span className="text-white font-bold">Deflate (Level {settings.compressionLevel})</span></div>
+                  </div>
+
                 </div>
               </details>
 
@@ -318,38 +363,6 @@ export function QRPlayer({
         )}
 
       </div>
-
-      {/* ── Advanced Dev Settings Drawer ── */}
-      {isDevToolsOpen && (
-        <div className="fixed inset-y-0 right-0 w-80 bg-zinc-900 border-l border-zinc-800 shadow-2xl z-50 flex flex-col text-zinc-300 font-mono text-xs">
-          <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-            <span className="font-bold text-white uppercase tracking-wider">Advanced Settings</span>
-            <Button variant="ghost" size="icon" onClick={() => setIsDevToolsOpen(false)} className="h-6 w-6"><ChevronRight className="w-4 h-4" /></Button>
-          </div>
-          <div className="p-4 space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-zinc-500"><span>Target FPS</span><span className="text-white">{fps}</span></div>
-              <div className="grid grid-cols-3 gap-2">
-                {[10, 15, 30].map(v => (
-                  <Button key={v} size="sm" variant={fps === v ? "default" : "outline"} className={fps === v ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" : "bg-zinc-950 border-zinc-800 text-zinc-400"} onClick={() => setFps(v)}>{v}</Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-zinc-500"><span>Sync Epoch</span><span className="text-white">{epochDuration}ms</span></div>
-              <div className="grid grid-cols-3 gap-2">
-                {[500, 1000, 1500].map(v => (
-                  <Button key={v} size="sm" variant={epochDuration === v ? "default" : "outline"} className={epochDuration === v ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" : "bg-zinc-950 border-zinc-800 text-zinc-400"} onClick={() => setEpochDuration(v)}>{v}</Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2 pt-4 border-t border-zinc-800">
-              <div className="flex justify-between text-zinc-500"><span>Manual Complete</span></div>
-              <Button size="sm" variant="outline" className="w-full bg-green-950/30 text-green-500 border-green-900/50 hover:bg-green-900/50 hover:text-green-400" onClick={() => { setIsDevToolsOpen(false); onComplete?.(); }}>Trigger Complete Screen</Button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
