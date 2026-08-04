@@ -36,7 +36,7 @@ export default function SettingsPage() {
               id="fps"
               value={[settings.fps]} 
               min={1} max={30} step={1} 
-              onValueChange={(val) => updateSettings({ fps: val[0] })} 
+              onValueChange={(val) => updateSettings({ fps: Array.isArray(val) ? val[0] : (val as number) })} 
             />
             <p className="text-xs text-muted-foreground">Higher FPS transfers files faster but requires a better camera on the receiving device.</p>
           </div>

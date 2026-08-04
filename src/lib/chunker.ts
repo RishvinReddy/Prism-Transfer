@@ -49,7 +49,7 @@ export async function processFileForTransfer(
   // 3. Compress the entire file
   const uncompressedData = new Uint8Array(arrayBuffer);
   const compressedData = compressData(uncompressedData, {
-    level: options?.compressionLevel ?? DEFAULT_COMPRESSION,
+    level: (options?.compressionLevel ?? DEFAULT_COMPRESSION) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
   });
   const compressedSize = compressedData.byteLength;
 

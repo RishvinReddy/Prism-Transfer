@@ -104,7 +104,7 @@ export function QRPlayer({ frames, initialFps = DEFAULT_FPS }: QRPlayerProps) {
             min={1} 
             max={30} 
             step={1} 
-            onValueChange={(val) => setFps(val[0])}
+            onValueChange={(val) => setFps(Array.isArray(val) ? val[0] : (val as number))}
             className="flex-1"
           />
           <span className="text-sm font-mono w-12 text-right">{fps} fps</span>

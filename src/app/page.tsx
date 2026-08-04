@@ -1,8 +1,9 @@
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, QrCode, Scan, Shield } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, QrCode, Shield, Send, Download } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export default function Home() {
   return (
@@ -20,19 +21,15 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-        <Button size="lg" asChild className="rounded-full font-semibold">
-          <Link href="/send">
-            <QrCode className="mr-2 h-5 w-5" />
-            Send a File
-          </Link>
-        </Button>
-        <Button size="lg" variant="secondary" asChild className="rounded-full font-semibold">
-          <Link href="/receive">
-            <Scan className="mr-2 h-5 w-5" />
-            Receive a File
-          </Link>
-        </Button>
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 w-full sm:w-auto">
+        <Link href="/send" className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto rounded-full font-bold shadow-lg shadow-primary/20 px-8")}>
+          <Send className="w-4 h-4 mr-2" />
+          Send File
+        </Link>
+        <Link href="/receive" className={cn(buttonVariants({ size: "lg", variant: "secondary" }), "w-full sm:w-auto rounded-full font-bold px-8")}>
+          <Download className="w-4 h-4 mr-2" />
+          Receive File
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-12 text-left">

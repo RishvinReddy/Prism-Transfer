@@ -26,7 +26,7 @@ export function useProgressTracker(totalPackets: number = 0) {
 
   // Interval to calculate speed every second
   useEffect(() => {
-    if (packetsReceived === 0 || packetsReceived >= totalPackets) return;
+    if (receivedIndexes.size === 0 || receivedIndexes.size >= totalPackets) return;
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -42,7 +42,7 @@ export function useProgressTracker(totalPackets: number = 0) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [packetsReceived, totalPackets]);
+  }, [receivedIndexes.size, totalPackets]);
 
   const recordPacket = useCallback((index: number, isDuplicate: boolean = false) => {
     if (startTimeRef.current === null) {

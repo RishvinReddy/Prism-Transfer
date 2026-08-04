@@ -67,13 +67,13 @@ export async function reconstructFile(
   }
 
   // 5. Verify SHA-256
-  const isValidSha = await verifySHA(decompressedData.buffer, manifest.sha256);
+  const isValidSha = await verifySHA(decompressedData.buffer as ArrayBuffer, manifest.sha256);
   if (!isValidSha) {
     throw new ReconstructionError("Global SHA-256 verification failed. File is corrupted.");
   }
 
   // 6. Return as Blob ready for download
-  return new Blob([decompressedData], { type: manifest.mimeType });
+  return new Blob([decompressedData as any], { type: manifest.mimeType });
 }
 
 /**
