@@ -236,6 +236,32 @@ export function QRPlayer({
                   />
                 </div>
               </div>
+
+              {/* Speed Control */}
+              <div className="space-y-3 pt-4 border-t border-zinc-900">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-zinc-400 font-bold uppercase tracking-wider">Transmission Speed</span>
+                  <span className="text-indigo-400 font-mono font-bold">{fps} FPS</span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[10, 15, 20, 30, 45].map((v) => (
+                    <Button
+                      key={v}
+                      size="sm"
+                      variant={fps === v ? "default" : "outline"}
+                      className={cn(
+                        "h-8 text-xs font-mono rounded-lg",
+                        fps === v 
+                          ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" 
+                          : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                      )}
+                      onClick={() => setFps(v)}
+                    >
+                      {v}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Bottom Controls */}
