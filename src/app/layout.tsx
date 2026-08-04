@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
+import { Footer } from "@/components/footer";
 import { SettingsProvider } from "@/contexts/settings";
 
 export const metadata: Metadata = {
@@ -36,6 +37,7 @@ export default function RootLayout({
             <main className="flex-1 flex flex-col container mx-auto px-0 max-w-none py-8">
               {children}
             </main>
+            <Footer />
           </SettingsProvider>
         </ThemeProvider>
       </body>
