@@ -107,8 +107,10 @@ export function QRPlayer({
           
           <div 
             className={cn(
-              "bg-white flex items-center justify-center transition-all duration-300",
-              isFullscreen ? "w-[90vmin] h-[90vmin]" : "w-[85vw] h-[85vw] max-w-[60vh] max-h-[60vh] lg:w-[75vh] lg:h-[75vh]"
+              "bg-white flex items-center justify-center transition-all duration-300 rounded-3xl shadow-2xl",
+              isFullscreen 
+                ? "w-[90vmin] h-[90vmin]" 
+                : "w-[min(80vw,50vh)] h-[min(80vw,50vh)] lg:w-[min(60vw,70vh)] lg:h-[min(60vw,70vh)]"
             )}
             onClick={() => setIsPlaying(!isPlaying)}
             style={{ cursor: 'pointer' }}
@@ -120,7 +122,7 @@ export function QRPlayer({
               </div>
             ) : (
               // Using a massive quiet zone via CSS padding around the generator
-              <div className="w-full h-full p-8 lg:p-12 box-border">
+              <div className="w-full h-full p-6 lg:p-10 box-border">
                 <QRGenerator data={frames[currentIndex]} size={1024} className="w-full h-full" />
               </div>
             )}
