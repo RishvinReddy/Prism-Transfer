@@ -83,7 +83,7 @@ export function QRPlayer({
     }
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, fps, epochDuration, totalFrames, onLoop]);
+  }, [isPlaying, fps, epochDuration, totalFrames, onLoop, isResetting]);
 
   // Rough simulation of speed
   const transferSpeed = fps * (manifest.chunkSize / 1024 / 1024); // MB/s
