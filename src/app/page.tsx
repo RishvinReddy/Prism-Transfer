@@ -9,6 +9,7 @@ import { SecuritySection } from "@/components/home/SecuritySection";
 import { SupportedPlatforms, TechStack } from "@/components/home/TechStack";
 import { FAQ } from "@/components/home/FAQ";
 import { CTA } from "@/components/home/CTA";
+import { BuiltBy } from "@/components/home/BuiltBy";
 
 function Divider() {
   return <div className="w-full h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />;
@@ -38,6 +39,8 @@ export default function HomePage() {
       <FAQ />
       <Divider />
       <CTA />
+      <Divider />
+      <BuiltBy />
     </div>
   );
 }

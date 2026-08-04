@@ -21,14 +21,21 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/open-source",
     "/guides",
     "/blog",
-    "/compare"
+    "/compare",
+    "/portfolio",
+    "/author/rishvin-reddy",
   ];
 
   const sitemapEntries: MetadataRoute.Sitemap = staticPaths.map((path) => ({
     url: `${BASE_URL}${path}`,
     lastModified: new Date(),
     changeFrequency: "weekly",
-    priority: path === "" ? 1.0 : 0.8,
+    priority:
+      path === "" ? 1.0
+      : path === "/author/rishvin-reddy" ? 0.9
+      : path === "/portfolio" ? 0.8
+      : path === "/about" ? 0.8
+      : 0.7,
   }));
 
   // Append comparison entries
