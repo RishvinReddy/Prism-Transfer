@@ -8,9 +8,60 @@ import { Footer } from "@/components/footer";
 import { SettingsProvider } from "@/contexts/settings";
 
 export const metadata: Metadata = {
-  title: "PrismTransfer",
-  description: "Offline Camera-to-Camera File Transfer using QR Codes",
-  manifest: "/manifest.json",
+  metadataBase: new URL("https://prismtransfer-rishvinreddy.vercel.app"),
+  title: {
+    default: "PrismTransfer — Fast, Secure Offline File Transfer via Animated QR Codes",
+    template: "%s | PrismTransfer"
+  },
+  description: "Transfer files instantly using animated QR codes. No internet, no cables, no Bluetooth, no accounts. Privacy-first, serverless browser-based file sharing.",
+  applicationName: "PrismTransfer",
+  authors: [{ name: "Rishvin Reddy", url: "https://github.com/RishvinReddy" }],
+  publisher: "Rishvin Labs",
+  creator: "Rishvin Reddy",
+  category: "Technology",
+  keywords: [
+    "offline file transfer", "QR code file transfer", "browser file sharing", 
+    "secure file transfer", "offline sharing", "QR transfer", 
+    "cross platform file transfer", "privacy", "air gap", "animated QR", 
+    "PWA", "web app"
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://prismtransfer-rishvinreddy.vercel.app",
+    title: "PrismTransfer — Fast, Secure Offline File Transfer",
+    description: "Transfer files using animated QR codes. No Internet. No Bluetooth. No Cables.",
+    siteName: "PrismTransfer",
+    images: [
+      {
+        url: "/logo.png",
+        width: 1200,
+        height: 630,
+        alt: "PrismTransfer - Fast Secure Offline File Sharing",
+      }
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PrismTransfer — Fast, Secure Offline File Transfer",
+    description: "Fast, secure offline file transfer using animated QR codes.",
+    creator: "@RishvinReddy",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({
