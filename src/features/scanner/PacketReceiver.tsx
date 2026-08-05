@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
 import { validateManifestDetailed, validatePacketDetailed, verifyCRC } from "@/lib/validator";
+import {
+  deserializeManifestV2,
+  deserializePacketV2,
+  deserializeManifestV1,
+  deserializePacketV1,
+} from "@/lib/serializer";
 import { saveManifest, savePacket, getAllPackets, clearTransfer, getManifest } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
@@ -190,7 +196,10 @@ export function PacketReceiver() {
     let packetId = "unknown";
     try {
       const parsed = JSON.parse(decodedText);
-      packetId = parsed.type === "manifest" ? "manifest" : parsed.packetId || "unknown";
+      // v2 uses short "id" field; v1 uses "packetId"; manifests get special label
+      packetId = (parsed.k === "M" || parsed.type === "manifest")
+        ? "manifest"
+        : parsed.id ?? parsed.packetId ?? "unknown";
       addStage("JSON Parse", "SUCCESS", "Valid JSON structure");
 
       const now = Date.now();
@@ -213,29 +222,42 @@ export function PacketReceiver() {
       lastScannedRef.current = { id: packetId, time: now };
       addStage("Debounce", "SUCCESS", `Accepted new read for ${packetId}`);
 
-      if (parsed.type === "manifest") {
-        const isNewSession = !manifest || parsed.transferId !== manifest.transferId;
+      // ── Protocol routing: detect v2 (compact) vs v1 (verbose) ──────────────
+      // V2 manifests: discriminator k:"M" (instead of type:"manifest")
+      // V2 packets:   short field names, v≥2
+      // V1 manifests: type:"manifest"
+      // V1 packets:   verbose field names, version:1
+
+      const isManifest = parsed.k === "M" || parsed.type === "manifest";
+      const isV2 = parsed.k === "M" || (typeof parsed.v === "number" && parsed.v >= 2);
+
+      if (isManifest) {
+        // ── Manifest path ──
+        // Deserialize to full TransferManifest using the correct path
+        const deserialized: TransferManifest = isV2
+          ? deserializeManifestV2(decodedText)
+          : deserializeManifestV1(decodedText);
+
+        const isNewSession = !manifest || deserialized.transferId !== manifest.transferId;
 
         if (isNewSession) {
           setPhase("Receiving Metadata");
-          delete parsed.type;
           const { valid, reason } = validateManifestDetailed(parsed);
 
           if (valid) {
-            addStage("Schema Validate", "SUCCESS", "Manifest conforms to schema");
-            const m = parsed as TransferManifest;
+            addStage("Schema Validate", "SUCCESS", `v${isV2 ? 2 : 1} manifest conforms to schema`);
 
             // Clean up previous transfer state in IndexedDB if starting a new one
             if (manifest) {
               await clearTransfer(manifest.transferId);
             }
 
-            await saveManifest(m);
-            persistActiveTransferId(m.transferId);
+            await saveManifest(deserialized);
+            persistActiveTransferId(deserialized.transferId);
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
 
-            setManifest(m);
-            tracker.resetProgress(m.totalPackets);
+            setManifest(deserialized);
+            tracker.resetProgress(deserialized.totalPackets);
             setPhase("Receiving Chunks");
 
             pauseScannerRef.current = true;
@@ -252,29 +274,38 @@ export function PacketReceiver() {
         if (manifest) {
           const { valid, reason } = validatePacketDetailed(parsed);
 
-          if (valid && parsed.transferId === manifest.transferId) {
-            addStage("Schema Validate", "SUCCESS", `Valid packet ${parsed.index}`);
-            const p = parsed as TransferPacket;
+          if (valid) {
+            // Deserialize to full TransferPacket using the correct path
+            const p: TransferPacket = isV2
+              ? deserializePacketV2(decodedText)
+              : deserializePacketV1(decodedText);
 
-            // Per-packet CRC validation
-            const crcValid = verifyCRC(p);
-            if (!crcValid) {
-              addStage("CRC Check", "ERROR", `CRC mismatch for packet ${p.index}`);
-              tracker.recordCorruption();
+            if (p.transferId !== manifest.transferId) {
+              addStage("Schema Validate", "ERROR", `TransferId mismatch`);
               finalStatus = "ERROR";
             } else {
-              addStage("CRC Check", "SUCCESS", "Integrity verified");
-              const isNew = await savePacket(p);
+              addStage("Schema Validate", "SUCCESS", `v${isV2 ? 2 : 1} packet ${p.index}`);
 
-              if (isNew) {
-                addStage("Store", "SUCCESS", "Saved new packet to IDB");
-                tracker.recordPacket(p.index, false);
-                pauseScannerRef.current = true;
-                setTimeout(() => { pauseScannerRef.current = false; }, 50);
+              // Per-packet CRC validation
+              const crcValid = verifyCRC(p);
+              if (!crcValid) {
+                addStage("CRC Check", "ERROR", `CRC mismatch for packet ${p.index}`);
+                tracker.recordCorruption();
+                finalStatus = "ERROR";
               } else {
-                addStage("Store", "SKIPPED", "Packet already existed in IDB");
-                tracker.recordPacket(p.index, true);
-                finalStatus = "DROPPED";
+                addStage("CRC Check", "SUCCESS", "Integrity verified");
+                const isNew = await savePacket(p);
+
+                if (isNew) {
+                  addStage("Store", "SUCCESS", "Saved new packet to IDB");
+                  tracker.recordPacket(p.index, false);
+                  pauseScannerRef.current = true;
+                  setTimeout(() => { pauseScannerRef.current = false; }, 50);
+                } else {
+                  addStage("Store", "SKIPPED", "Packet already existed in IDB");
+                  tracker.recordPacket(p.index, true);
+                  finalStatus = "DROPPED";
+                }
               }
             }
           } else {

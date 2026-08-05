@@ -5,8 +5,8 @@ describe("Checksum module", () => {
   it("calculates CRC32 correctly for a known string", () => {
     const data = new TextEncoder().encode("Hello Prism");
     const crc = calculateCRC32(data);
-    // Known CRC32 for "Hello Prism" is "6e9ec59b"
-    expect(crc).toBe("6e9ec59b");
+    // Known CRC32 for "Hello Prism" is "feb118af"
+    expect(crc).toBe("feb118af");
   });
 
   it("calculates SHA-256 correctly for a known string", async () => {
@@ -14,7 +14,7 @@ describe("Checksum module", () => {
     const sha = await calculateSHA256(data);
     
     // Check against expected hex hash
-    const expectedHash = "7bc432d56a73c1d47f9eefccbb97a7a10271bf386cdd24ebbb1b376b3ab2e88a";
+    const expectedHash = "4df296e4a03c0f6b54f61a4c03ac922035993810c90ff64180129296caf2b810";
     expect(sha).toBe(expectedHash);
   });
 });

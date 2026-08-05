@@ -3,111 +3,146 @@ import { PROTOCOL_VERSION } from "@/constants/protocol";
 import { calculateCRC32, calculateSHA256 } from "./checksum";
 import { decodeBase64Url } from "./encoder";
 
-/**
- * Validates that a parsed JSON object conforms to the TransferManifest schema.
- */
-export function validateManifest(manifest: Partial<TransferManifest>): manifest is TransferManifest {
-  if (!manifest) return false;
-  
-  const requiredFields = [
-    "version", "transferId", "filename", "mimeType", 
-    "originalSize", "compressedSize", "chunkSize", 
-    "totalPackets", "sha256", "compressionAlgorithm"
-  ];
+// ─── V2 validation (compact field names) ─────────────────────────────────────
 
-  for (const field of requiredFields) {
-    if (manifest[field as keyof TransferManifest] === undefined) {
-      return false;
-    }
-  }
+const MANIFEST_V2_REQUIRED = ["v", "t", "f", "m", "os", "cs", "ck", "n", "h", "ca"] as const;
+const PACKET_V2_REQUIRED   = ["v", "t", "id", "i", "n", "c", "d"] as const;
 
-  if (manifest.version !== PROTOCOL_VERSION) {
-    console.warn(`Manifest version mismatch. Expected ${PROTOCOL_VERSION}, got ${manifest.version}`);
-  }
+// ─── V1 validation (verbose field names) ─────────────────────────────────────
 
-  return true;
+const MANIFEST_V1_REQUIRED = [
+  "version", "transferId", "filename", "mimeType",
+  "originalSize", "compressedSize", "chunkSize",
+  "totalPackets", "sha256", "compressionAlgorithm",
+] as const;
+
+const PACKET_V1_REQUIRED = [
+  "version", "transferId", "packetId", "index",
+  "total", "crc32", "payload",
+] as const;
+
+// ─── Protocol version detection ───────────────────────────────────────────────
+
+function isV2Packet(obj: Record<string, unknown>): boolean {
+  // V2 packets carry a short "v" number field AND "d" (payload alias)
+  return typeof obj.v === "number" && obj.v >= 2 && "d" in obj;
 }
 
-export function validateManifestDetailed(manifest: Partial<TransferManifest> | null): { valid: boolean; reason?: string } {
-  if (!manifest) return { valid: false, reason: "Manifest is null or undefined" };
-  
-  const requiredFields = [
-    "version", "transferId", "filename", "mimeType", 
-    "originalSize", "compressedSize", "chunkSize", 
-    "totalPackets", "sha256", "compressionAlgorithm"
-  ];
+function isV2Manifest(obj: Record<string, unknown>): boolean {
+  // V2 manifests use k:"M" as discriminator
+  return obj.k === "M";
+}
 
-  for (const field of requiredFields) {
-    if (manifest[field as keyof TransferManifest] === undefined) {
-      return { valid: false, reason: `Missing required field: ${field}` };
+// ─── Manifest validation ──────────────────────────────────────────────────────
+
+export function validateManifest(
+  manifest: Partial<TransferManifest>
+): manifest is TransferManifest {
+  return validateManifestDetailed(manifest).valid;
+}
+
+export function validateManifestDetailed(
+  manifest: Partial<TransferManifest> | Record<string, unknown> | null
+): { valid: boolean; reason?: string } {
+  if (!manifest) return { valid: false, reason: "Manifest is null or undefined" };
+
+  const obj = manifest as Record<string, unknown>;
+
+  if (isV2Manifest(obj)) {
+    // ── V2 path ──
+    for (const field of MANIFEST_V2_REQUIRED) {
+      if (obj[field] === undefined) {
+        return { valid: false, reason: `V2 manifest missing field: ${field}` };
+      }
     }
+    // Version check against the compact "v" field
+    if (typeof obj.v === "number" && obj.v !== PROTOCOL_VERSION) {
+      return {
+        valid: false,
+        reason: `Protocol version mismatch. Expected ${PROTOCOL_VERSION}, got ${obj.v}`,
+      };
+    }
+    return { valid: true };
   }
 
-  if (manifest.version !== PROTOCOL_VERSION) {
-    return { valid: false, reason: `Version mismatch. Expected ${PROTOCOL_VERSION}, got ${manifest.version}` };
+  // ── V1 path (backward-compat fallback) ──
+  for (const field of MANIFEST_V1_REQUIRED) {
+    if ((manifest as any)[field] === undefined) {
+      return { valid: false, reason: `V1 manifest missing field: ${field}` };
+    }
+  }
+  if ((manifest as any).version !== undefined && (manifest as any).version !== 1) {
+    return {
+      valid: false,
+      reason: `Unsupported V1 manifest version: ${(manifest as any).version}`,
+    };
   }
 
   return { valid: true };
 }
 
-/**
- * Validates that a parsed JSON object conforms to the TransferPacket schema.
- */
-export function validatePacket(packet: Partial<TransferPacket>): packet is TransferPacket {
-  if (!packet) return false;
+// ─── Packet validation ────────────────────────────────────────────────────────
 
-  const requiredFields = [
-    "version", "transferId", "packetId", "index", 
-    "total", "crc32", "payload"
-  ];
-
-  for (const field of requiredFields) {
-    if (packet[field as keyof TransferPacket] === undefined) {
-      return false;
-    }
-  }
-
-  return true;
+export function validatePacket(
+  packet: Partial<TransferPacket>
+): packet is TransferPacket {
+  return validatePacketDetailed(packet).valid;
 }
 
-export function validatePacketDetailed(packet: Partial<TransferPacket> | null): { valid: boolean; reason?: string } {
+export function validatePacketDetailed(
+  packet: Partial<TransferPacket> | Record<string, unknown> | null
+): { valid: boolean; reason?: string } {
   if (!packet) return { valid: false, reason: "Packet is null or undefined" };
 
-  const requiredFields = [
-    "version", "transferId", "packetId", "index", 
-    "total", "crc32", "payload"
-  ];
+  const obj = packet as Record<string, unknown>;
 
-  for (const field of requiredFields) {
-    if (packet[field as keyof TransferPacket] === undefined) {
-      return { valid: false, reason: `Missing required field: ${field}` };
+  if (isV2Packet(obj)) {
+    // ── V2 path ──
+    for (const field of PACKET_V2_REQUIRED) {
+      if (obj[field] === undefined) {
+        return { valid: false, reason: `V2 packet missing field: ${field}` };
+      }
+    }
+    return { valid: true };
+  }
+
+  // ── V1 path (backward-compat fallback) ──
+  for (const field of PACKET_V1_REQUIRED) {
+    if ((packet as any)[field] === undefined) {
+      return { valid: false, reason: `V1 packet missing field: ${field}` };
     }
   }
 
   return { valid: true };
 }
 
+// ─── Integrity checks ─────────────────────────────────────────────────────────
+
 /**
- * Verifies the integrity of a packet's payload against its CRC32 hash.
+ * Verifies CRC32 integrity of a packet's payload.
+ * Works for both v1 (payload field) and v2 (d field on wire; normalized to payload after deserialization).
  */
 export function verifyCRC(packet: TransferPacket): boolean {
   try {
     const chunkBytes = decodeBase64Url(packet.payload);
     const computedCrc = calculateCRC32(chunkBytes);
     return computedCrc === packet.crc32;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
 
 /**
- * Verifies the integrity of the reconstructed file against the global SHA-256 hash.
+ * Verifies SHA-256 of the fully reconstructed file against the manifest hash.
  */
-export async function verifySHA(reconstructedBuffer: ArrayBuffer, expectedSha256: string): Promise<boolean> {
+export async function verifySHA(
+  reconstructedBuffer: ArrayBuffer,
+  expectedSha256: string
+): Promise<boolean> {
   try {
     const computedSha = await calculateSHA256(reconstructedBuffer);
     return computedSha === expectedSha256;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

@@ -4,6 +4,8 @@ import * as React from "react";
 import { ProcessedTransfer } from "@/lib/chunker";
 import { serializeManifest, serializePacket } from "@/lib/serializer";
 import { QRPlayer } from "@/features/qr/QRPlayer";
+import { CalibrationPreflight } from "@/features/qr/CalibrationPreflight";
+import { CalibrationResult } from "@/lib/calibrationEngine";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2, RotateCcw, MonitorUp, Zap, Clock } from "lucide-react";
@@ -16,7 +18,7 @@ export interface TransferControllerProps {
   autoAdvance?: boolean;
 }
 
-export type SenderPhase = "Preparing" | "Transferring" | "Completed";
+export type SenderPhase = "Preparing" | "Calibrating" | "Transferring" | "Completed";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -27,6 +29,7 @@ function formatSize(bytes: number): string {
 export function TransferController({ transfer, onCancel, autoAdvance = false }: TransferControllerProps) {
   const [frames, setFrames] = React.useState<string[]>([]);
   const [phase, setPhase] = React.useState<SenderPhase>("Preparing");
+  const [initialFps, setInitialFps] = React.useState<number | undefined>(undefined);
   
   // Stats
   const [startTime, setStartTime] = React.useState<number>(0);
@@ -40,9 +43,14 @@ export function TransferController({ transfer, onCancel, autoAdvance = false }: 
     
     // The sequence is strictly: Manifest, then Packets 1..N
     setFrames([serializedManifest, ...serializedPackets]);
+    setPhase("Calibrating");
+  }, [transfer]);
+
+  const handleCalibrationComplete = (result: CalibrationResult) => {
+    setInitialFps(result.recommendedFps);
     setPhase("Transferring");
     setStartTime(Date.now());
-  }, [transfer]);
+  };
 
   const handleComplete = () => {
     setEndTime(Date.now());
@@ -63,6 +71,14 @@ export function TransferController({ transfer, onCancel, autoAdvance = false }: 
       <div className="flex flex-col items-center justify-center min-h-[400px] w-full animate-pulse space-y-4">
         <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
         <p className="text-muted-foreground font-medium">Preparing transfer sequence...</p>
+      </div>
+    );
+  }
+
+  if (phase === "Calibrating") {
+    return (
+      <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm animate-in fade-in duration-300 flex items-center justify-center">
+        <CalibrationPreflight onComplete={handleCalibrationComplete} />
       </div>
     );
   }
@@ -137,6 +153,7 @@ export function TransferController({ transfer, onCancel, autoAdvance = false }: 
         onComplete={handleComplete}
         onLoop={handleLoop}
         totalLoops={totalLoops}
+        initialFps={initialFps}
       />
     </div>
   );
