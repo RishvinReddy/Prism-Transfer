@@ -13,6 +13,9 @@ export interface TransferProgress {
   missingPackets: number[];
   receivedIndexes: Set<number>;
   receivedParityIndexes: Set<number>;
+  recoveredCount: number;
+  signalQuality: number;
+  recoveryRate: number;
 }
 
 export function useProgressTracker(totalDataPackets: number = 0) {
@@ -20,6 +23,7 @@ export function useProgressTracker(totalDataPackets: number = 0) {
   const [receivedParityIndexes, setReceivedParityIndexes] = useState<Set<number>>(new Set());
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [corruptedCount, setCorruptedCount] = useState(0);
+  const [recoveredCount, setRecoveredCount] = useState(0);
   const [packetsPerSecond, setPacketsPerSecond] = useState(0);
 
   const startTimeRef = useRef<number | null>(null);
@@ -80,11 +84,16 @@ export function useProgressTracker(totalDataPackets: number = 0) {
     setDuplicateCount((prev) => prev + 1);
   }, []);
 
+  const recordRecovery = useCallback((count: number = 1) => {
+    setRecoveredCount((prev) => prev + count);
+  }, []);
+
   const resetProgress = useCallback((newTotal: number = 0) => {
     setReceivedIndexes(new Set());
     setReceivedParityIndexes(new Set());
     setDuplicateCount(0);
     setCorruptedCount(0);
+    setRecoveredCount(0);
     setPacketsPerSecond(0);
     startTimeRef.current = null;
     lastUpdateTimeRef.current = Date.now();
@@ -105,26 +114,35 @@ export function useProgressTracker(totalDataPackets: number = 0) {
   // Compute missing packets (contiguous expected minus received)
   const missingPackets = Array.from({ length: totalDataPackets }, (_, i) => i).filter(i => !receivedIndexes.has(i));
 
-  const progress: TransferProgress = {
-    totalDataPackets: totalDataPackets,
-    packetsReceived,
-    packetsRemaining,
-    percentage,
-    packetsPerSecond,
-    estimatedTimeRemainingMs,
-    duplicateCount,
-    corruptedCount,
-    isComplete,
-    missingPackets,
-    receivedIndexes,
-    receivedParityIndexes,
-  };
+  const totalObserved = packetsReceived + receivedParityIndexes.size + duplicateCount + corruptedCount;
+  const signalQuality = totalObserved > 0 ? Math.round(((packetsReceived + receivedParityIndexes.size) / totalObserved) * 100) : 100;
+  
+  // Calculate recovery rate (if any recovery was needed)
+  const theoreticalLost = Math.max(0, corruptedCount + recoveredCount); // rough approx
+  const recoveryRate = theoreticalLost > 0 ? Math.min(100, Math.round((recoveredCount / theoreticalLost) * 100)) : 100;
 
   return {
-    progress,
+    progress: {
+      totalDataPackets,
+      packetsReceived,
+      packetsRemaining,
+      percentage,
+      packetsPerSecond,
+      estimatedTimeRemainingMs,
+      duplicateCount,
+      corruptedCount,
+      recoveredCount,
+      isComplete,
+      missingPackets,
+      receivedIndexes,
+      receivedParityIndexes,
+      signalQuality,
+      recoveryRate
+    },
     recordPacket,
     recordCorruption,
     recordDuplicate,
+    recordRecovery,
     resetProgress,
     setInitialReceived,
   };

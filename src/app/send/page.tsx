@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { getStagedFile } from "@/lib/fileStager";
 import { useSettings } from "@/contexts/settings";
 import { useDiagnostics } from "@/contexts/diagnostics";
+import { TransferAdvisor } from "@/features/transfer/TransferAdvisor";
+import { TransferOptions } from "@/types/transfer";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -92,6 +94,7 @@ export default function SendPage() {
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [result, setResult] = React.useState<ProcessedTransfer | null>(null);
   const [isTransferring, setIsTransferring] = React.useState(false);
+  const [isAdvising, setIsAdvising] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [inlineError, setInlineError] = React.useState<string | null>(null);
 
@@ -110,14 +113,14 @@ export default function SendPage() {
   // ── Reprocess current file when reliabilityMode changes ─────────────────
   React.useEffect(() => {
     const currentFile = fileQueue[queueIndex];
-    if (currentFile && !isTransferring) {
+    if (currentFile && !isTransferring && !isAdvising && result) {
       processFile(currentFile);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.reliabilityMode]);
 
   // ── File processing ──────────────────────────────────────────────────────
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, optionsOverride?: TransferOptions) => {
     setIsProcessing(true);
     setResult(null);
     setInlineError(null);
@@ -172,7 +175,7 @@ export default function SendPage() {
           reject(e);
           worker.terminate();
         };
-        worker.postMessage({ file, options: settings });
+        worker.postMessage({ file, options: optionsOverride || settings });
       });
 
       setResult(processed);
@@ -191,8 +194,7 @@ export default function SendPage() {
       const combined = [...prev, ...newFiles];
       // If nothing was previously queued, start processing the first new file
       if (prev.length === 0) {
-        const firstFile = combined[0];
-        setTimeout(() => processFile(firstFile), 0);
+        setIsAdvising(true);
       }
       return combined;
     });
@@ -208,7 +210,7 @@ export default function SendPage() {
         if (next.length > 0) {
           const newActive = Math.min(queueIndex, next.length - 1);
           setQueueIndex(newActive);
-          setTimeout(() => processFile(next[newActive]), 0);
+          setIsAdvising(true); // Advisor for next file
         } else {
           setQueueIndex(0);
         }
@@ -332,6 +334,25 @@ export default function SendPage() {
             "Send Again" / "Send New File" buttons inside it call onCancel, which
             takes us back to the upload screen via handleCancelTransfer. */}
       </motion.div>
+    );
+  }
+
+  // ── Render: advising ─────────────────────────────────────────────────────
+  if (isAdvising && fileQueue[queueIndex]) {
+    return (
+      <div className="flex flex-col items-center max-w-3xl mx-auto w-full px-4 space-y-8 mt-4">
+        <TransferAdvisor 
+          file={fileQueue[queueIndex]} 
+          onAccept={(opts) => {
+            setIsAdvising(false);
+            processFile(fileQueue[queueIndex], opts);
+          }}
+          onCancel={() => {
+            setIsAdvising(false);
+            removeFromQueue(queueIndex);
+          }}
+        />
+      </div>
     );
   }
 

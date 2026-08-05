@@ -21,6 +21,8 @@ import { useSettings } from "@/contexts/settings";
 import { useDiagnostics } from "@/contexts/diagnostics";
 import { cn } from "@/lib/utils";
 import { ReceiveDebugger, DebugPacket, DebugStage } from "./ReceiveDebugger";
+import { TransferHealthDashboard } from "./TransferHealthDashboard";
+import { TransferReport } from "@/features/transfer/TransferReport";
 import {
   Loader2,
   CheckCircle2,
@@ -53,6 +55,7 @@ function formatSize(bytes: number): string {
 function formatETA(ms: number): string {
   if (ms <= 0) return "—";
   const s = Math.ceil(ms / 1000);
+  if (s < 60) return `${s}s`;
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
@@ -248,6 +251,8 @@ export function PacketReceiver() {
             const isNew = await packetStore.savePacket(recovered);
             if (isNew) {
               tracker.recordPacket(recovered.index, false, "data");
+              tracker.recordRecovery(1);
+              if (diagnosticsCtx) { }
             }
           }
           worker.terminate();
@@ -264,7 +269,7 @@ export function PacketReceiver() {
         console.error("Parity recovery failed", e);
       }
     }
-  }, [tracker]);
+  }, [tracker, diagnosticsCtx]);
 
   // ── Scan handler ─────────────────────────────────────────────────────────
   const handleScan = async (decodedText: string, binaryData?: Uint8Array) => {
@@ -608,6 +613,11 @@ export function PacketReceiver() {
                 )}
               </div>
             )}
+
+            {/* Live Transfer Health overlay inside the viewfinder container */}
+            {phase === "Receiving Chunks" && (
+              <TransferHealthDashboard progress={tracker.progress} />
+            )}
           </div>
         </div>
 
@@ -834,6 +844,23 @@ export function PacketReceiver() {
               >
                 Receive Another File
               </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Transfer Report overlay */}
+        <AnimatePresence>
+          {phase === "Completed" && manifest && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mt-6"
+            >
+              <TransferReport
+                manifest={manifest}
+                progress={tracker.progress}
+                onClose={resetSession}
+              />
             </motion.div>
           )}
         </AnimatePresence>

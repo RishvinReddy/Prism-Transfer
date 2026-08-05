@@ -44,6 +44,7 @@ export interface TransferOptions {
   errorCorrectionLevel?: "L" | "M" | "Q" | "H";
   chunkSizeOverride?: number; // Bytes of binary payload per chunk (before encoding)
   reliabilityMode?: "speed" | "balanced" | "reliable" | "turbo";
+  fps?: number; // Playback FPS override
 }
 
 export interface TransferStats {
