@@ -31,7 +31,16 @@ export function calculateCRC32(data: Uint8Array): string {
  * Calculates a SHA-256 hash using the Web Crypto API.
  */
 export async function calculateSHA256(data: BufferSource): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  let validData: Uint8Array;
+  if (data instanceof ArrayBuffer) {
+    validData = new Uint8Array(data);
+  } else if (ArrayBuffer.isView(data)) {
+    validData = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  } else {
+    validData = new Uint8Array(data as any);
+  }
+
+  const hashBuffer = await crypto.subtle.digest("SHA-256", validData);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray
     .map((b) => b.toString(16).padStart(2, "0"))
