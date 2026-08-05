@@ -1,6 +1,7 @@
 import { TransferManifest, TransferPacket } from "../../src/types/transfer";
-import { processFileForTransfer, TransferSettings, ProcessedTransfer } from "../../src/lib/chunker";
-import { reconstructFile, ReconstructionResult } from "../../src/features/scanner/reconstructionEngine";
+import { processFileForTransfer, ProcessedTransfer } from "../../src/lib/chunker";
+import { TransferOptions } from "../../src/types/transfer";
+import { reconstructFile } from "../../src/features/scanner/reconstructionEngine";
 import { MemoryStorage } from "../../src/lib/storage/MemoryStorage";
 import { validateManifestDetailed, validatePacketDetailed } from "../../src/lib/validator";
 import { FaultInjectionEngine, SimulationScenario } from "./scenario";
@@ -23,13 +24,13 @@ export class TransferSimulator {
 
   async runScenario(
     payload: Uint8Array,
-    settings: TransferSettings,
+    settings: TransferOptions,
     scenario: SimulationScenario
   ): Promise<SimulatorResult> {
     const startTime = Date.now();
     
     // 1. Virtual Sender
-    const file = new File([payload], "simulated.bin", { type: "application/octet-stream" });
+    const file = new File([payload as any], "simulated.bin", { type: "application/octet-stream" });
     const processed: ProcessedTransfer = await processFileForTransfer(file, settings);
     
     // 2. Transport & Fault Injection
@@ -72,7 +73,7 @@ export class TransferSimulator {
       
       // We pass the storedPackets to reconstruction engine. The engine itself will
       // attempt parity recovery if necessary.
-      const result: ReconstructionResult = await reconstructFile(processed.manifest, storedPackets);
+      const result = await reconstructFile(processed.manifest, storedPackets);
       
       reconstructedSize = result.blob.size;
       
