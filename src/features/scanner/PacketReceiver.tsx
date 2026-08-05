@@ -12,7 +12,7 @@ import {
   deserializePacketV1,
 } from "@/lib/serializer";
 import { isV3Packet, decodeManifestPacketV3, decodeDataPacketV3 } from "@/lib/binaryCodec";
-import { saveManifest, savePacket, getAllPackets, clearTransfer, getManifest } from "@/features/storage/packetStore";
+import { packetStore } from "@/lib/storage";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { AdaptiveTransferController } from "../transfer/AdaptiveTransferController";
@@ -64,7 +64,7 @@ async function findResumableSession(): Promise<TransferManifest | null> {
     const storedId = localStorage.getItem("prism_active_transferId");
     if (!storedId) return null;
 
-    const m = await getManifest(storedId);
+    const m = await packetStore.getManifest(storedId);
     if (!m) {
       // Manifest was cleared (transfer completed or IDB wiped) — remove stale ID
       clearActiveTransferId();
@@ -73,7 +73,7 @@ async function findResumableSession(): Promise<TransferManifest | null> {
 
     // Only offer resume if at least 1 packet was already received.
     // This prevents a banner for transfers where only the manifest was scanned.
-    const packets = await getAllPackets(storedId);
+    const packets = await packetStore.getAllPackets(storedId);
     if (packets.length === 0) {
       clearActiveTransferId();
       return null;
@@ -81,7 +81,7 @@ async function findResumableSession(): Promise<TransferManifest | null> {
     // Check auto-expiry (e.g., 2 hours = 7200000 ms)
     const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
     if (Date.now() - m.createdAt > SESSION_TIMEOUT_MS) {
-      await clearTransfer(storedId);
+      await packetStore.clearTransfer(storedId);
       clearActiveTransferId();
       return null;
     }
@@ -141,7 +141,7 @@ export function PacketReceiver() {
   React.useEffect(() => {
     findResumableSession().then(async (found) => {
       if (found) {
-        const packets = await getAllPackets(found.transferId);
+        const packets = await packetStore.getAllPackets(found.transferId);
         const dataPackets = packets.filter(p => p.kind === "data");
         const received = dataPackets.length;
         const missing = found.totalDataPackets - received;
@@ -158,7 +158,7 @@ export function PacketReceiver() {
   const resetSession = React.useCallback(async () => {
     // Clean up IDB for the current session
     if (manifest) {
-      try { await clearTransfer(manifest.transferId); } catch {}
+      try { await packetStore.clearTransfer(manifest.transferId); } catch {}
     }
     clearActiveTransferId();
 
@@ -181,7 +181,7 @@ export function PacketReceiver() {
     if (!resumableSession) return;
     setShowResumeBanner(false);
 
-    const existingPackets = await getAllPackets(resumableSession.transferId);
+    const existingPackets = await packetStore.getAllPackets(resumableSession.transferId);
     setManifest(resumableSession);
     tracker.resetProgress(resumableSession.totalDataPackets);
     // Pre-credit already-received packets
@@ -235,7 +235,7 @@ export function PacketReceiver() {
     if (receivedDataCount === expectedDataCount - 1 && missingDataIndex !== -1) {
       // Exactly 1 missing data packet and we have the parity packet! Recover it!
       try {
-        const allPackets = await getAllPackets(currentManifest.transferId);
+        const allPackets = await packetStore.getAllPackets(currentManifest.transferId);
         const groupDataPackets = allPackets.filter(p => p.kind === "data" && p.index >= groupStart && p.index < groupEnd);
         const parityPacket = allPackets.find(p => p.index === parityIndex && p.kind === "parity");
         
@@ -245,7 +245,7 @@ export function PacketReceiver() {
         worker.onmessage = async (e) => {
           if (e.data.success && e.data.type === "recoverParity") {
             const recovered = e.data.recoveredPacket as TransferPacket;
-            const isNew = await savePacket(recovered);
+            const isNew = await packetStore.savePacket(recovered);
             if (isNew) {
               tracker.recordPacket(recovered.index, false, "data");
             }
@@ -378,10 +378,10 @@ export function PacketReceiver() {
 
             // Clean up previous transfer state in IndexedDB if starting a new one
             if (manifest) {
-              await clearTransfer(manifest.transferId);
+              await packetStore.clearTransfer(manifest.transferId);
             }
 
-            await saveManifest(deserializedManifest);
+            await packetStore.saveManifest(deserializedManifest);
             persistActiveTransferId(deserializedManifest.transferId);
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
 
@@ -426,7 +426,7 @@ export function PacketReceiver() {
                 finalStatus = "ERROR";
               } else {
                 addStage("CRC Check", "SUCCESS", "Integrity verified");
-                const isNew = await savePacket(p);
+                const isNew = await packetStore.savePacket(p);
 
                 if (isNew) {
                   addStage("Store", "SUCCESS", "Saved new packet to IDB");
@@ -469,7 +469,7 @@ export function PacketReceiver() {
 
       const run = async () => {
         try {
-          const allPackets = await getAllPackets(manifest.transferId);
+          const allPackets = await packetStore.getAllPackets(manifest.transferId);
           const dataPackets = allPackets.filter(p => p.kind === "data");
           setPhase("Reconstructing");
 
@@ -514,7 +514,7 @@ export function PacketReceiver() {
             worker.postMessage({ type: "reconstructFile", manifest, packets: dataPackets });
           });
 
-          await clearTransfer(manifest.transferId);
+          await packetStore.clearTransfer(manifest.transferId);
           clearActiveTransferId();
           setDownloadedBlob({ blob, filename: manifest.filename });
           setPhase("Completed");

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FileUp, Play, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { validateManifestDetailed, validatePacketDetailed } from "@/lib/validator";
-import { saveManifest, savePacket, getAllPackets, clearTransfer } from "@/features/storage/packetStore";
+import { packetStore } from "@/lib/storage";
 import { reconstructFile, downloadBlob } from "@/features/scanner/reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 
@@ -67,7 +67,7 @@ export default function SimulatorPage() {
             const { valid, reason } = validateManifestDetailed(parsed);
             if (valid) {
               manifest = parsed as TransferManifest;
-              await saveManifest(manifest);
+              await packetStore.saveManifest(manifest);
               addLog(`[Frame ${i}] Valid Manifest saved. Expected packets: ${manifest.totalDataPackets}`, "success");
             } else {
               addLog(`[Frame ${i}] Manifest validation failed: ${reason}`, "error");
@@ -78,7 +78,7 @@ export default function SimulatorPage() {
             const { valid, reason } = validatePacketDetailed(parsed);
             if (valid && parsed.transferId === manifest.transferId) {
               const p = parsed as TransferPacket;
-              const isNew = await savePacket(p);
+              const isNew = await packetStore.savePacket(p);
               if (isNew) {
                 receivedCount++;
                 addLog(`[Frame ${i}] Saved Packet ${p.index} (${receivedCount}/${manifest.totalDataPackets})`, "info");
@@ -95,11 +95,11 @@ export default function SimulatorPage() {
 
       if (manifest && receivedCount >= manifest.totalDataPackets) {
         addLog("All packets received. Starting reconstruction...", "info");
-        const storedPackets = await getAllPackets(manifest.transferId);
+        const storedPackets = await packetStore.getAllPackets(manifest.transferId);
         const { blob } = await reconstructFile(manifest, storedPackets);
         addLog(`Reconstruction successful. Blob size: ${blob.size} bytes. Verified SHA.`, "success");
         downloadBlob(blob, "SIMULATED_" + manifest.filename);
-        await clearTransfer(manifest.transferId);
+        await packetStore.clearTransfer(manifest.transferId);
         addLog("Transfer cleared from DB.", "info");
       } else {
         addLog(`Simulation finished, but only ${receivedCount}/${manifest?.totalDataPackets || '?'} packets were stored.`, "error");
