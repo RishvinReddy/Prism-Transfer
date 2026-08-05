@@ -40,7 +40,7 @@ export async function calculateSHA256(data: BufferSource): Promise<string> {
     validData = new Uint8Array(data as any);
   }
 
-  const hashBuffer = await crypto.subtle.digest("SHA-256", validData);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", validData as BufferSource);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray
     .map((b) => b.toString(16).padStart(2, "0"))
