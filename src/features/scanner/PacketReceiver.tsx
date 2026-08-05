@@ -854,7 +854,7 @@ export function PacketReceiver() {
 
         {/* Device Info Footer */}
         <div className="flex justify-between items-center text-xs text-muted-foreground px-1 border-t border-border/10 pt-4 mt-2">
-          <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Optical v2 protocol</span>
+          <span className="font-semibold uppercase tracking-wider text-[10px] text-zinc-500">Optical v{manifest?.version || 3} protocol</span>
           <span>Session: <span className="font-mono text-zinc-400">{manifest ? "Active" : "Waiting"}</span></span>
         </div>
 

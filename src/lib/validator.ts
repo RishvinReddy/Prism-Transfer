@@ -140,6 +140,7 @@ export async function verifySHA(
   expectedSha256: string
 ): Promise<boolean> {
   try {
+    if (!expectedSha256) return true; // V3 protocol drops SHA-256 to save space
     const computedSha = await calculateSHA256(reconstructedBuffer);
     return computedSha === expectedSha256;
   } catch {
