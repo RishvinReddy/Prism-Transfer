@@ -15,13 +15,16 @@ import { TransferManifest, TransferPacket } from "@/types/transfer";
  * 
  * Manifest Packet (Type 0x00):
  * [28-35] uint64 (bigint): Total Size (original file size)
- * [36-39] uint32: Chunk Count
- * [40-41] uint16: Filename Length (N)
- * [42 ... 42+N-1] UTF-8 Filename
- * [42+N] uint8: MIME Type Length (M)
- * [43+N ... 43+N+M-1] UTF-8 MIME Type
+ * [36-39] uint32: Chunk Count (totalDataPackets)
+ * [40-41] uint16: totalParityPackets
+ * [42-43] uint16: parityGroupSize
+ * [44]    uint8: parityAlgorithm (0=none, 1=xor)
+ * [45-46] uint16: Filename Length (N)
+ * [47 ... 47+N-1] UTF-8 Filename
+ * [47+N] uint8: MIME Type Length (M)
+ * [48+N ... 48+N+M-1] UTF-8 MIME Type
  * 
- * Data Packet (Type 0x01):
+ * Data Packet (Type 0x01) / Parity Packet (Type 0x02):
  * [28-31] uint32: Chunk Index
  * [32-35] uint32: Payload CRC32
  * [36...] raw payload bytes (zero-copy extraction)
@@ -30,6 +33,7 @@ import { TransferManifest, TransferPacket } from "@/types/transfer";
 const V3_MAGIC = 0x03;
 const TYPE_MANIFEST = 0x00;
 const TYPE_DATA = 0x01;
+const TYPE_PARITY = 0x02;
 const HEADER_SIZE = 28; // Standard Header (25) + 3 bytes padding/alignment? Let's stick to spec.
 
 const textEncoder = new TextEncoder();
@@ -64,7 +68,7 @@ export function encodeDataPacketV3(packet: TransferPacket): Uint8Array {
   const view = new DataView(buffer.buffer);
 
   view.setUint8(0, V3_MAGIC);
-  view.setUint8(1, TYPE_DATA);
+  view.setUint8(1, packet.kind === "parity" ? TYPE_PARITY : TYPE_DATA);
   view.setUint8(2, 0); // flags
   encodeTransferId(packet.transferId, view, 3);
   view.setUint32(24, 0, false); // Header CRC
@@ -81,7 +85,8 @@ export function decodeDataPacketV3(buffer: Uint8Array): TransferPacket {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   
   if (view.getUint8(0) !== V3_MAGIC) throw new Error("Not a V3 packet");
-  if (view.getUint8(1) !== TYPE_DATA) throw new Error("Not a Data packet");
+  const typeByte = view.getUint8(1);
+  if (typeByte !== TYPE_DATA && typeByte !== TYPE_PARITY) throw new Error("Not a Data or Parity packet");
 
   const transferId = decodeTransferId(view, 3);
   const index = view.getUint32(28, false);
@@ -94,6 +99,7 @@ export function decodeDataPacketV3(buffer: Uint8Array): TransferPacket {
     version: 3,
     transferId,
     packetId: `${transferId}:${index}`,
+    kind: typeByte === TYPE_PARITY ? "parity" : "data",
     index,
     total: 0, // In V3, total packets is only in Manifest to save space
     crc32,
@@ -105,9 +111,8 @@ export function encodeManifestPacketV3(manifest: TransferManifest): Uint8Array {
   const filenameBytes = textEncoder.encode(manifest.filename);
   const mimeBytes = textEncoder.encode(manifest.mimeType);
 
-  // Calculate size
-  // Header (28) + size(8) + count(4) + nameLen(2) + name(N) + mimeLen(1) + mime(M)
-  const envelopeSize = 28 + 8 + 4 + 2 + filenameBytes.length + 1 + mimeBytes.length;
+  // Header (28) + size(8) + count(4) + parityFields(5) + nameLen(2) + name(N) + mimeLen(1) + mime(M)
+  const envelopeSize = 28 + 8 + 4 + 5 + 2 + filenameBytes.length + 1 + mimeBytes.length;
   const buffer = new Uint8Array(envelopeSize);
   const view = new DataView(buffer.buffer);
 
@@ -119,11 +124,15 @@ export function encodeManifestPacketV3(manifest: TransferManifest): Uint8Array {
 
   // BigInt for total size (8 bytes)
   view.setBigUint64(28, BigInt(manifest.originalSize), false);
-  view.setUint32(36, manifest.totalPackets, false);
-  view.setUint16(40, filenameBytes.length, false);
-  buffer.set(filenameBytes, 42);
+  view.setUint32(36, manifest.totalDataPackets, false);
+  view.setUint16(40, manifest.totalParityPackets, false);
+  view.setUint16(42, manifest.parityGroupSize, false);
+  view.setUint8(44, manifest.parityAlgorithm === "xor" ? 1 : 0);
   
-  const mimeOffset = 42 + filenameBytes.length;
+  view.setUint16(45, filenameBytes.length, false);
+  buffer.set(filenameBytes, 47);
+  
+  const mimeOffset = 47 + filenameBytes.length;
   view.setUint8(mimeOffset, mimeBytes.length);
   buffer.set(mimeBytes, mimeOffset + 1);
 
@@ -138,13 +147,17 @@ export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
 
   const transferId = decodeTransferId(view, 3);
   const originalSize = Number(view.getBigUint64(28, false));
-  const totalPackets = view.getUint32(36, false);
-  const nameLen = view.getUint16(40, false);
+  const totalDataPackets = view.getUint32(36, false);
+  const totalParityPackets = view.getUint16(40, false);
+  const parityGroupSize = view.getUint16(42, false);
+  const parityAlgorithm = view.getUint8(44) === 1 ? "xor" : "none";
   
-  const filenameBytes = buffer.subarray(42, 42 + nameLen);
+  const nameLen = view.getUint16(45, false);
+  
+  const filenameBytes = buffer.subarray(47, 47 + nameLen);
   const filename = textDecoder.decode(filenameBytes);
 
-  const mimeOffset = 42 + nameLen;
+  const mimeOffset = 47 + nameLen;
   const mimeLen = view.getUint8(mimeOffset);
   const mimeBytes = buffer.subarray(mimeOffset + 1, mimeOffset + 1 + mimeLen);
   const mimeType = textDecoder.decode(mimeBytes);
@@ -155,7 +168,10 @@ export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
     filename,
     mimeType,
     originalSize,
-    totalPackets,
+    totalDataPackets,
+    totalParityPackets,
+    parityGroupSize,
+    parityAlgorithm,
     // Note: V3 drops chunk size/compression algo strings from manifest to save space, 
     // assuming fixed defaults (e.g., DEFLATE) and dynamic chunks. 
     // We populate with defaults for type compatibility.

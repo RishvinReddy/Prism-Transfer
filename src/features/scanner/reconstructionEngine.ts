@@ -18,8 +18,8 @@ export async function reconstructFile(
   manifest: TransferManifest,
   packets: TransferPacket[]
 ): Promise<{ blob: Blob; metrics: { crcTimeMs: number; decompressTimeMs: number; shaTimeMs: number } }> {
-  if (packets.length !== manifest.totalPackets) {
-    throw new ReconstructionError(`Missing packets. Expected ${manifest.totalPackets}, got ${packets.length}`);
+  if (packets.length !== manifest.totalDataPackets) {
+    throw new ReconstructionError(`Missing packets. Expected ${manifest.totalDataPackets}, got ${packets.length}`);
   }
 
   // 1. Sort packets by index

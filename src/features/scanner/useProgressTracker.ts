@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface TransferProgress {
-  totalPackets: number;
+  totalDataPackets: number;
   packetsReceived: number;
   packetsRemaining: number;
   percentage: number;
@@ -12,10 +12,12 @@ export interface TransferProgress {
   isComplete: boolean;
   missingPackets: number[];
   receivedIndexes: Set<number>;
+  receivedParityIndexes: Set<number>;
 }
 
-export function useProgressTracker(totalPackets: number = 0) {
+export function useProgressTracker(totalDataPackets: number = 0) {
   const [receivedIndexes, setReceivedIndexes] = useState<Set<number>>(new Set());
+  const [receivedParityIndexes, setReceivedParityIndexes] = useState<Set<number>>(new Set());
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [corruptedCount, setCorruptedCount] = useState(0);
   const [packetsPerSecond, setPacketsPerSecond] = useState(0);
@@ -26,7 +28,7 @@ export function useProgressTracker(totalPackets: number = 0) {
 
   // Interval to calculate speed every second
   useEffect(() => {
-    if (receivedIndexes.size === 0 || receivedIndexes.size >= totalPackets) return;
+    if (receivedIndexes.size === 0 || receivedIndexes.size >= totalDataPackets) return;
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -42,9 +44,9 @@ export function useProgressTracker(totalPackets: number = 0) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [receivedIndexes.size, totalPackets]);
+  }, [receivedIndexes.size, totalDataPackets]);
 
-  const recordPacket = useCallback((index: number, isDuplicate: boolean = false) => {
+  const recordPacket = useCallback((index: number, isDuplicate: boolean = false, kind: "data" | "parity" = "data") => {
     if (startTimeRef.current === null) {
       startTimeRef.current = Date.now();
       lastUpdateTimeRef.current = Date.now();
@@ -53,12 +55,20 @@ export function useProgressTracker(totalPackets: number = 0) {
     if (isDuplicate) {
       setDuplicateCount((prev) => prev + 1);
     } else {
-      setReceivedIndexes((prev) => {
-        const next = new Set(prev);
-        next.add(index);
-        return next;
-      });
-      packetsSinceLastUpdateRef.current += 1;
+      if (kind === "data") {
+        setReceivedIndexes((prev) => {
+          const next = new Set(prev);
+          next.add(index);
+          return next;
+        });
+        packetsSinceLastUpdateRef.current += 1;
+      } else {
+        setReceivedParityIndexes((prev) => {
+          const next = new Set(prev);
+          next.add(index);
+          return next;
+        });
+      }
     }
   }, []);
 
@@ -72,6 +82,7 @@ export function useProgressTracker(totalPackets: number = 0) {
 
   const resetProgress = useCallback((newTotal: number = 0) => {
     setReceivedIndexes(new Set());
+    setReceivedParityIndexes(new Set());
     setDuplicateCount(0);
     setCorruptedCount(0);
     setPacketsPerSecond(0);
@@ -86,16 +97,16 @@ export function useProgressTracker(totalPackets: number = 0) {
   }, []);
 
   const packetsReceived = receivedIndexes.size;
-  const packetsRemaining = Math.max(0, totalPackets - packetsReceived);
-  const percentage = totalPackets > 0 ? Math.min(100, Math.round((packetsReceived / totalPackets) * 100)) : 0;
+  const packetsRemaining = Math.max(0, totalDataPackets - packetsReceived);
+  const percentage = totalDataPackets > 0 ? Math.min(100, Math.round((packetsReceived / totalDataPackets) * 100)) : 0;
   const estimatedTimeRemainingMs = packetsPerSecond > 0 ? (packetsRemaining / packetsPerSecond) * 1000 : 0;
-  const isComplete = totalPackets > 0 && packetsReceived >= totalPackets;
+  const isComplete = totalDataPackets > 0 && packetsReceived >= totalDataPackets;
 
   // Compute missing packets (contiguous expected minus received)
-  const missingPackets = Array.from({ length: totalPackets }, (_, i) => i).filter(i => !receivedIndexes.has(i));
+  const missingPackets = Array.from({ length: totalDataPackets }, (_, i) => i).filter(i => !receivedIndexes.has(i));
 
   const progress: TransferProgress = {
-    totalPackets,
+    totalDataPackets: totalDataPackets,
     packetsReceived,
     packetsRemaining,
     percentage,
@@ -106,6 +117,7 @@ export function useProgressTracker(totalPackets: number = 0) {
     isComplete,
     missingPackets,
     receivedIndexes,
+    receivedParityIndexes,
   };
 
   return {

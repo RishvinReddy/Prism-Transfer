@@ -8,7 +8,10 @@ export interface TransferManifest {
   originalSize: number;
   compressedSize: number;
   chunkSize: number;
-  totalPackets: number;
+  totalDataPackets: number;
+  totalParityPackets: number;
+  parityGroupSize: number;
+  parityAlgorithm: "none" | "xor";
   sha256: string;
   compressionAlgorithm: string;
   createdAt: number;
@@ -18,8 +21,9 @@ export interface TransferPacket {
   version: number;
   transferId: string;
   packetId: string; // transferId:index
+  kind: "data" | "parity";
   index: number;
-  total: number;
+  total: number; // totalDataPackets
   crc32: string; // hex string
   payload: string | Uint8Array; // Base64URL string (v1/v2) or raw bytes (v3)
 }

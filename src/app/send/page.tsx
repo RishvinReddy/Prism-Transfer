@@ -145,14 +145,14 @@ export default function SendPage() {
               const chunkSize = e.data.result.manifest.chunkSize;
               const payloadEfficiencyPercent = Math.round(
                 (e.data.result.manifest.originalSize / 
-                 (e.data.result.manifest.totalPackets * e.data.result.manifest.chunkSize)) * 100
+                 (e.data.result.manifest.totalDataPackets * e.data.result.manifest.chunkSize)) * 100
               );
               
               diagnosticsCtx.updateProtocol({
                 activeVersion,
                 chunkSize,
                 payloadEfficiencyPercent,
-                totalPackets: e.data.result.manifest.totalPackets
+                totalPackets: e.data.result.manifest.totalDataPackets
               });
             }
             resolve(e.data.result);
@@ -455,7 +455,7 @@ export default function SendPage() {
                       <QrCode className="w-3 h-3 mr-1" /> Total Packets
                     </span>
                     <span className="font-mono text-foreground">
-                      {result.manifest.totalPackets} frames
+                      {result.manifest.totalDataPackets} frames
                     </span>
                   </div>
                   <div className="flex flex-col space-y-1 p-4 rounded-xl bg-muted/30 border border-border/40">
@@ -463,7 +463,7 @@ export default function SendPage() {
                       <Clock className="w-3 h-3 mr-1" /> Est. Transfer
                     </span>
                     <span className="font-mono text-foreground">
-                      ~{Math.max(1, Math.ceil(result.manifest.totalPackets / 10))} sec
+                      ~{Math.max(1, Math.ceil(result.manifest.totalDataPackets / 10))} sec
                     </span>
                   </div>
                 </div>

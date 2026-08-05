@@ -109,7 +109,7 @@ export function TransferController({ transfer, onCancel, autoAdvance = false }: 
           </div>
           <div className="flex flex-col p-4 bg-black/20 rounded-2xl border border-border/20">
             <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1"><Layers className="w-3 h-3 inline mr-1" />Packets</span>
-            <span className="font-mono text-lg">{transfer.manifest.totalPackets}</span>
+            <span className="font-mono text-lg">{transfer.manifest.totalDataPackets}</span>
           </div>
           <div className="flex flex-col p-4 bg-black/20 rounded-2xl border border-border/20">
             <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1"><Clock className="w-3 h-3 inline mr-1" />Duration</span>

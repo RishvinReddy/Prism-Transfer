@@ -12,6 +12,7 @@ export const QR_TARGET_VERSION = 20;            // Pinned: 97×97 modules, relia
 export const DEFAULT_ERROR_CORRECTION = "M";    // L | M | Q | H
 export const MAX_FILENAME_LENGTH = 255;
 export const DEFAULT_FPS = 10;
+export const PARITY_GROUP_SIZE = 10;
 
 // ─── Serialization constants ──────────────────────────────────────────────────
 // Used by chunker.ts to compute usable binary payload per QR frame.

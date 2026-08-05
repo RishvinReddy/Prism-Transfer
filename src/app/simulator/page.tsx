@@ -68,7 +68,7 @@ export default function SimulatorPage() {
             if (valid) {
               manifest = parsed as TransferManifest;
               await saveManifest(manifest);
-              addLog(`[Frame ${i}] Valid Manifest saved. Expected packets: ${manifest.totalPackets}`, "success");
+              addLog(`[Frame ${i}] Valid Manifest saved. Expected packets: ${manifest.totalDataPackets}`, "success");
             } else {
               addLog(`[Frame ${i}] Manifest validation failed: ${reason}`, "error");
             }
@@ -81,7 +81,7 @@ export default function SimulatorPage() {
               const isNew = await savePacket(p);
               if (isNew) {
                 receivedCount++;
-                addLog(`[Frame ${i}] Saved Packet ${p.index} (${receivedCount}/${manifest.totalPackets})`, "info");
+                addLog(`[Frame ${i}] Saved Packet ${p.index} (${receivedCount}/${manifest.totalDataPackets})`, "info");
               }
             } else {
               if (!valid) addLog(`[Frame ${i}] Packet validation failed: ${reason}`, "error");
@@ -93,7 +93,7 @@ export default function SimulatorPage() {
         }
       }
 
-      if (manifest && receivedCount >= manifest.totalPackets) {
+      if (manifest && receivedCount >= manifest.totalDataPackets) {
         addLog("All packets received. Starting reconstruction...", "info");
         const storedPackets = await getAllPackets(manifest.transferId);
         const { blob } = await reconstructFile(manifest, storedPackets);
@@ -102,7 +102,7 @@ export default function SimulatorPage() {
         await clearTransfer(manifest.transferId);
         addLog("Transfer cleared from DB.", "info");
       } else {
-        addLog(`Simulation finished, but only ${receivedCount}/${manifest?.totalPackets || '?'} packets were stored.`, "error");
+        addLog(`Simulation finished, but only ${receivedCount}/${manifest?.totalDataPackets || '?'} packets were stored.`, "error");
       }
 
     } catch (e: any) {

@@ -13,7 +13,7 @@ const PACKET_V2_REQUIRED   = ["v", "t", "id", "i", "n", "c", "d"] as const;
 const MANIFEST_V1_REQUIRED = [
   "version", "transferId", "filename", "mimeType",
   "originalSize", "compressedSize", "chunkSize",
-  "totalPackets", "sha256", "compressionAlgorithm",
+  "totalDataPackets", "sha256", "compressionAlgorithm",
 ] as const;
 
 const PACKET_V1_REQUIRED = [

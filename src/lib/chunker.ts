@@ -8,11 +8,13 @@ import {
   PROTOCOL_VERSION,
   DEFAULT_COMPRESSION,
   QR_TARGET_VERSION,
+  PARITY_GROUP_SIZE,
 } from "@/constants/protocol";
 import { calculateCRC32, calculateSHA256 } from "./checksum";
 import { compressData } from "./compressor";
 import { encodeBase64Url } from "./encoder";
 import { computeMaxChunkSize } from "./qr";
+import { RecoveryRegistry } from "./recovery";
 
 // ─── Mode → EC level + safety factor ─────────────────────────────────────────
 //
@@ -125,13 +127,18 @@ export async function processFileForTransfer(
   const chunkSize = calculateOptimalChunkSize(options, compressedSize);
 
   // 5. Slice → CRC32 → Base64URL → TransferPacket
-  const totalPackets = Math.ceil(compressedSize / chunkSize) || 1;
+  // 5. Slice → CRC32 → Base64URL → TransferPacket
+  const totalDataPackets = Math.ceil(compressedSize / chunkSize) || 1;
   const packets: TransferPacket[] = [];
+  
+  // Store raw binary chunks to generate parity
+  const rawChunks: Uint8Array[] = [];
 
-  for (let index = 0; index < totalPackets; index++) {
+  for (let index = 0; index < totalDataPackets; index++) {
     const start = index * chunkSize;
     const end = Math.min(start + chunkSize, compressedSize);
     const chunkBytes = compressed.slice(start, end);
+    rawChunks.push(chunkBytes);
 
     const crc32 = calculateCRC32(chunkBytes);
     const payload = PROTOCOL_VERSION >= 3 ? chunkBytes : encodeBase64Url(chunkBytes);
@@ -140,11 +147,39 @@ export async function processFileForTransfer(
       version:    PROTOCOL_VERSION,
       transferId,
       packetId:   `${transferId}:${index}`,
+      kind:       "data",
       index,
-      total:      totalPackets,
+      total:      totalDataPackets,
       crc32,
       payload,
     });
+  }
+  
+  // 5.5 Generate Parity Packets
+  const totalParityPackets = Math.ceil(totalDataPackets / PARITY_GROUP_SIZE);
+  for (let pIndex = 0; pIndex < totalParityPackets; pIndex++) {
+    const parityBytes = new Uint8Array(chunkSize);
+    const startIndex = pIndex * PARITY_GROUP_SIZE;
+    const endIndex = Math.min(startIndex + PARITY_GROUP_SIZE, totalDataPackets);
+    
+    const algo = RecoveryRegistry["xor"];
+    if (algo) {
+      const parityBytes = algo.encodeParity(rawChunks.slice(startIndex, endIndex), chunkSize);
+      const crc32 = calculateCRC32(parityBytes);
+      const payload = PROTOCOL_VERSION >= 3 ? parityBytes : encodeBase64Url(parityBytes);
+      const index = totalDataPackets + pIndex;
+      
+      packets.push({
+        version:    PROTOCOL_VERSION,
+        transferId,
+        packetId:   `${transferId}:${index}`,
+        kind:       "parity",
+        index,
+        total:      totalDataPackets,
+        crc32,
+        payload,
+      });
+    }
   }
   const t3 = performance.now();
 
@@ -157,7 +192,10 @@ export async function processFileForTransfer(
     originalSize,
     compressedSize,
     chunkSize,
-    totalPackets,
+    totalDataPackets,
+    totalParityPackets,
+    parityGroupSize:      PARITY_GROUP_SIZE,
+    parityAlgorithm:      "xor",
     sha256,
     compressionAlgorithm: "deflate",
     createdAt,

@@ -61,7 +61,7 @@ function formatETA(ms: number): string {
 /** Attempt to find any stored manifest in IDB (we check for transferId stored in sessionStorage). */
 async function findResumableSession(): Promise<TransferManifest | null> {
   try {
-    const storedId = sessionStorage.getItem("prism_active_transferId");
+    const storedId = localStorage.getItem("prism_active_transferId");
     if (!storedId) return null;
 
     const m = await getManifest(storedId);
@@ -78,6 +78,13 @@ async function findResumableSession(): Promise<TransferManifest | null> {
       clearActiveTransferId();
       return null;
     }
+    // Check auto-expiry (e.g., 2 hours = 7200000 ms)
+    const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+    if (Date.now() - m.createdAt > SESSION_TIMEOUT_MS) {
+      await clearTransfer(storedId);
+      clearActiveTransferId();
+      return null;
+    }
 
     return m;
   } catch {
@@ -88,11 +95,11 @@ async function findResumableSession(): Promise<TransferManifest | null> {
 }
 
 function persistActiveTransferId(id: string) {
-  try { sessionStorage.setItem("prism_active_transferId", id); } catch {}
+  try { localStorage.setItem("prism_active_transferId", id); } catch {}
 }
 
 function clearActiveTransferId() {
-  try { sessionStorage.removeItem("prism_active_transferId"); } catch {}
+  try { localStorage.removeItem("prism_active_transferId"); } catch {}
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -115,11 +122,13 @@ export function PacketReceiver() {
   const adaptiveController = React.useRef(new AdaptiveTransferController());
   const [recommendations, setRecommendations] = React.useState(adaptiveController.current.recommend());
 
-  const tracker = useProgressTracker(manifest?.totalPackets || 0);
+  const tracker = useProgressTracker(manifest?.totalDataPackets || 0);
   const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
   const pauseScannerRef = React.useRef<boolean>(false);
   const timestampRef = React.useRef(Date.now());
   const [debugPackets, setDebugPackets] = React.useState<DebugPacket[]>([]);
+
+  const [resumeStats, setResumeStats] = React.useState<{ received: number; missing: number; percentage: number; lastActiveMs: number } | null>(null);
 
   // ── Initial phase transition ─────────────────────────────────────────────
   React.useEffect(() => {
@@ -130,9 +139,16 @@ export function PacketReceiver() {
 
   // ── Check for resumable session on mount ─────────────────────────────────
   React.useEffect(() => {
-    findResumableSession().then((found) => {
+    findResumableSession().then(async (found) => {
       if (found) {
+        const packets = await getAllPackets(found.transferId);
+        const dataPackets = packets.filter(p => p.kind === "data");
+        const received = dataPackets.length;
+        const missing = found.totalDataPackets - received;
+        const percentage = found.totalDataPackets > 0 ? Math.round((received / found.totalDataPackets) * 100) : 0;
+        
         setResumableSession(found);
+        setResumeStats({ received, missing, percentage, lastActiveMs: Date.now() - found.createdAt });
         setShowResumeBanner(true);
       }
     });
@@ -167,7 +183,7 @@ export function PacketReceiver() {
 
     const existingPackets = await getAllPackets(resumableSession.transferId);
     setManifest(resumableSession);
-    tracker.resetProgress(resumableSession.totalPackets);
+    tracker.resetProgress(resumableSession.totalDataPackets);
     // Pre-credit already-received packets
     existingPackets.forEach((p) => tracker.recordPacket(p.index, false));
     setPhase("Receiving Chunks");
@@ -183,6 +199,72 @@ export function PacketReceiver() {
   const addDebugPacket = (packet: DebugPacket) => {
     setDebugPackets(prev => [packet, ...prev].slice(0, 100));
   };
+
+  // ── Parity recovery check ────────────────────────────────────────────────
+  const attemptParityRecovery = React.useCallback(async (savedPacket: TransferPacket, currentManifest: TransferManifest) => {
+    if (currentManifest.parityAlgorithm !== "xor" || currentManifest.parityGroupSize <= 0) return;
+    
+    let groupIndex = 0;
+    if (savedPacket.kind === "data") {
+      groupIndex = Math.floor(savedPacket.index / currentManifest.parityGroupSize);
+    } else {
+      groupIndex = savedPacket.index - currentManifest.totalDataPackets;
+    }
+    
+    // Check if parity packet is available
+    const parityIndex = currentManifest.totalDataPackets + groupIndex;
+    if (!tracker.progress.receivedParityIndexes.has(parityIndex)) {
+      return; // No parity packet for this group yet
+    }
+    
+    const groupStart = groupIndex * currentManifest.parityGroupSize;
+    const groupEnd = Math.min(groupStart + currentManifest.parityGroupSize, currentManifest.totalDataPackets);
+    const expectedDataCount = groupEnd - groupStart;
+    
+    // Count how many data packets we have in this group
+    let receivedDataCount = 0;
+    let missingDataIndex = -1;
+    for (let i = groupStart; i < groupEnd; i++) {
+      if (tracker.progress.receivedIndexes.has(i)) {
+        receivedDataCount++;
+      } else {
+        missingDataIndex = i;
+      }
+    }
+    
+    if (receivedDataCount === expectedDataCount - 1 && missingDataIndex !== -1) {
+      // Exactly 1 missing data packet and we have the parity packet! Recover it!
+      try {
+        const allPackets = await getAllPackets(currentManifest.transferId);
+        const groupDataPackets = allPackets.filter(p => p.kind === "data" && p.index >= groupStart && p.index < groupEnd);
+        const parityPacket = allPackets.find(p => p.index === parityIndex && p.kind === "parity");
+        
+        if (!parityPacket || groupDataPackets.length !== expectedDataCount - 1) return;
+        
+        const worker = new Worker(new URL("../../workers/reconstruction.worker.ts", import.meta.url));
+        worker.onmessage = async (e) => {
+          if (e.data.success && e.data.type === "recoverParity") {
+            const recovered = e.data.recoveredPacket as TransferPacket;
+            const isNew = await savePacket(recovered);
+            if (isNew) {
+              tracker.recordPacket(recovered.index, false, "data");
+            }
+          }
+          worker.terminate();
+        };
+        worker.onerror = () => worker.terminate();
+        worker.postMessage({
+          type: "recoverParity",
+          manifest: currentManifest,
+          missingIndex: missingDataIndex,
+          packets: groupDataPackets,
+          parityPacket
+        });
+      } catch (e) {
+        console.error("Parity recovery failed", e);
+      }
+    }
+  }, [tracker]);
 
   // ── Scan handler ─────────────────────────────────────────────────────────
   const handleScan = async (decodedText: string, binaryData?: Uint8Array) => {
@@ -304,7 +386,7 @@ export function PacketReceiver() {
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
 
             setManifest(deserializedManifest);
-            tracker.resetProgress(deserializedManifest.totalPackets);
+            tracker.resetProgress(deserializedManifest.totalDataPackets);
             setPhase("Receiving Chunks");
 
             pauseScannerRef.current = true;
@@ -348,12 +430,15 @@ export function PacketReceiver() {
 
                 if (isNew) {
                   addStage("Store", "SUCCESS", "Saved new packet to IDB");
-                  tracker.recordPacket(p.index, false);
+                  tracker.recordPacket(p.index, false, p.kind || "data");
+                  if (manifest.parityAlgorithm === "xor") {
+                    attemptParityRecovery(p, manifest);
+                  }
                   pauseScannerRef.current = true;
                   setTimeout(() => { pauseScannerRef.current = false; }, 50);
                 } else {
                   addStage("Store", "SKIPPED", "Packet already existed in IDB");
-                  tracker.recordPacket(p.index, true);
+                  tracker.recordPacket(p.index, true, p.kind || "data");
                   finalStatus = "DROPPED";
                 }
               }
@@ -384,7 +469,8 @@ export function PacketReceiver() {
 
       const run = async () => {
         try {
-          const packets = await getAllPackets(manifest.transferId);
+          const allPackets = await getAllPackets(manifest.transferId);
+          const dataPackets = allPackets.filter(p => p.kind === "data");
           setPhase("Reconstructing");
 
           const worker = new Worker(new URL("../../workers/reconstruction.worker.ts", import.meta.url));
@@ -425,7 +511,7 @@ export function PacketReceiver() {
               diagnosticsCtx.updateReconstructionWorker({ status: "Running", latencyMs: 0 });
             }
             
-            worker.postMessage({ manifest, packets });
+            worker.postMessage({ type: "reconstructFile", manifest, packets: dataPackets });
           });
 
           await clearTransfer(manifest.transferId);
@@ -550,36 +636,69 @@ export function PacketReceiver() {
 
         {/* ── Resume previous session banner ── */}
         <AnimatePresence>
-          {showResumeBanner && resumableSession && (
+          {showResumeBanner && resumableSession && resumeStats && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="flex items-start space-x-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl"
+              className="flex flex-col space-y-4 p-5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl"
             >
-              <div className="p-2 bg-indigo-500/20 rounded-xl">
-                <History className="w-5 h-5 text-indigo-400" />
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-indigo-500/20 rounded-xl">
+                    <History className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Resume Transfer</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px] md:max-w-sm">
+                      {resumableSession.filename}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-extrabold text-indigo-400">{resumeStats.percentage}%</span>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">Incomplete transfer detected</p>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {resumableSession.filename} · {formatSize(resumableSession.originalSize)}
-                </p>
+
+              {/* Progress Bar */}
+              <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-zinc-800/40 p-[1px]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
+                  style={{ width: `${resumeStats.percentage}%` }}
+                />
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+
+              {/* Detailed Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="flex flex-col bg-black/20 p-2 rounded-lg border border-white/5">
+                  <span className="text-muted-foreground">Missing</span>
+                  <span className="font-mono font-medium">{resumeStats.missing} packets</span>
+                </div>
+                <div className="flex flex-col bg-black/20 p-2 rounded-lg border border-white/5">
+                  <span className="text-muted-foreground">Recovered</span>
+                  <span className="font-mono font-medium text-indigo-300">--</span>
+                </div>
+                <div className="flex flex-col bg-black/20 p-2 rounded-lg border border-white/5 md:col-span-2">
+                  <span className="text-muted-foreground">Last active</span>
+                  <span className="font-mono font-medium">{Math.floor(resumeStats.lastActiveMs / 60000)} min ago</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2">
                 <Button
-                  size="sm"
-                  className="h-8 rounded-lg text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
+                  className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
                   onClick={handleResume}
                 >
                   Resume
                 </Button>
-                <button
+                <Button
+                  variant="outline"
+                  className="flex-1 h-10 rounded-xl border-zinc-700 hover:bg-zinc-800 text-muted-foreground font-semibold"
                   onClick={handleDismissResume}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  Discard
+                </Button>
               </div>
             </motion.div>
           )}
@@ -640,7 +759,7 @@ export function PacketReceiver() {
             >
               <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Frames</span>
-                <span className="font-mono text-sm font-bold text-foreground mt-0.5">{tracker.progress.packetsReceived} / {tracker.progress.totalPackets}</span>
+                <span className="font-mono text-sm font-bold text-foreground mt-0.5">{tracker.progress.packetsReceived} / {tracker.progress.totalDataPackets}</span>
               </div>
               <div className="flex flex-col p-3 rounded-xl bg-zinc-950/20 border border-zinc-900">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">ETA</span>

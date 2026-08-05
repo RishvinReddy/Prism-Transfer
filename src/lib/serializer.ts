@@ -32,6 +32,7 @@ interface WirePacketV2 {
   v: number;
   t: string;
   id: string;
+  k?: "d" | "p"; // "d" = data, "p" = parity. Optional for backwards compat (assumes data)
   i: number;
   n: number;
   c: string;
@@ -47,7 +48,10 @@ interface WireManifestV2 {
   os: number;   // originalSize
   cs: number;   // compressedSize
   ck: number;   // chunkSize
-  n: number;    // totalPackets
+  n: number;    // totalDataPackets
+  tp?: number;  // totalParityPackets
+  pgs?: number; // parityGroupSize
+  pa?: "none" | "xor"; // parityAlgorithm
   h: string;    // sha256
   ca: string;   // compressionAlgorithm
   at: number;   // createdAt
@@ -60,6 +64,7 @@ export function serializePacketV2(packet: TransferPacket): string {
     v:  packet.version,
     t:  packet.transferId,
     id: packet.packetId,
+    k:  packet.kind === "parity" ? "p" : "d",
     i:  packet.index,
     n:  packet.total,
     c:  packet.crc32,
@@ -74,6 +79,7 @@ export function deserializePacketV2(json: string): TransferPacket {
     version:    w.v,
     transferId: w.t,
     packetId:   w.id,
+    kind:       w.k === "p" ? "parity" : "data",
     index:      w.i,
     total:      w.n,
     crc32:      w.c,
@@ -91,7 +97,10 @@ export function serializeManifestV2(manifest: TransferManifest): string {
     os: manifest.originalSize,
     cs: manifest.compressedSize,
     ck: manifest.chunkSize,
-    n:  manifest.totalPackets,
+    n:  manifest.totalDataPackets,
+    tp: manifest.totalParityPackets,
+    pgs: manifest.parityGroupSize,
+    pa: manifest.parityAlgorithm,
     h:  manifest.sha256,
     ca: manifest.compressionAlgorithm,
     at: manifest.createdAt,
@@ -109,7 +118,10 @@ export function deserializeManifestV2(json: string): TransferManifest {
     originalSize:         w.os,
     compressedSize:       w.cs,
     chunkSize:            w.ck,
-    totalPackets:         w.n,
+    totalDataPackets:     w.n,
+    totalParityPackets:   w.tp ?? 0,
+    parityGroupSize:      w.pgs ?? 0,
+    parityAlgorithm:      w.pa ?? "none",
     sha256:               w.h,
     compressionAlgorithm: w.ca,
     createdAt:            w.at,
@@ -126,7 +138,12 @@ export function serializePacketV1(packet: TransferPacket): string {
 /** @deprecated Use deserializePacketV2. Kept for v1 packet fallback on receiver. */
 export function deserializePacketV1(json: string): TransferPacket {
   try {
-    return JSON.parse(json) as TransferPacket;
+    const parsed = JSON.parse(json) as any;
+    return {
+      ...parsed,
+      kind: parsed.kind || "data",
+      total: parsed.totalPackets ?? parsed.total,
+    } as TransferPacket;
   } catch {
     throw new Error("Failed to deserialize v1 packet");
   }
@@ -144,6 +161,16 @@ export function deserializeManifestV1(json: string): TransferManifest {
     if (parsed.type === "manifest") {
       delete parsed.type;
     }
+    
+    // Map totalPackets to totalDataPackets if migrating V1 -> V3 internal representation
+    if (parsed.totalPackets !== undefined && parsed.totalDataPackets === undefined) {
+      parsed.totalDataPackets = parsed.totalPackets;
+      delete parsed.totalPackets;
+    }
+    parsed.totalParityPackets = parsed.totalParityPackets ?? 0;
+    parsed.parityGroupSize = parsed.parityGroupSize ?? 0;
+    parsed.parityAlgorithm = parsed.parityAlgorithm ?? "none";
+    
     return parsed as TransferManifest;
   } catch {
     throw new Error("Failed to deserialize v1 manifest");
