@@ -5,15 +5,23 @@ import { motion, AnimatePresence } from "motion/react";
 import { QRScanner } from "./QRScanner";
 import { useProgressTracker } from "./useProgressTracker";
 import { validateManifestDetailed, validatePacketDetailed, verifyCRC } from "@/lib/validator";
-import { saveManifest, savePacket, getAllPackets, clearTransfer } from "@/features/storage/packetStore";
+import { saveManifest, savePacket, getAllPackets, clearTransfer, getManifest } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useSettings } from "@/contexts/settings";
 import { cn } from "@/lib/utils";
 import { ReceiveDebugger, DebugPacket, DebugStage } from "./ReceiveDebugger";
-import { Loader2, CheckCircle2, AlertTriangle, RefreshCcw, Download, RotateCcw, MonitorSmartphone } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  RotateCcw,
+  MonitorSmartphone,
+  History,
+  X,
+} from "lucide-react";
 
 // ─── Transfer State Machine ─────────────────────────────────────────────────
 export type ReceiverPhase =
@@ -40,6 +48,45 @@ function formatETA(ms: number): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+// ─── IndexedDB resume helpers ────────────────────────────────────────────────
+/** Attempt to find any stored manifest in IDB (we check for transferId stored in sessionStorage). */
+async function findResumableSession(): Promise<TransferManifest | null> {
+  try {
+    const storedId = sessionStorage.getItem("prism_active_transferId");
+    if (!storedId) return null;
+
+    const m = await getManifest(storedId);
+    if (!m) {
+      // Manifest was cleared (transfer completed or IDB wiped) — remove stale ID
+      clearActiveTransferId();
+      return null;
+    }
+
+    // Only offer resume if at least 1 packet was already received.
+    // This prevents a banner for transfers where only the manifest was scanned.
+    const packets = await getAllPackets(storedId);
+    if (packets.length === 0) {
+      clearActiveTransferId();
+      return null;
+    }
+
+    return m;
+  } catch {
+    // IDB is unavailable or corrupt — clean up gracefully
+    clearActiveTransferId();
+    return null;
+  }
+}
+
+function persistActiveTransferId(id: string) {
+  try { sessionStorage.setItem("prism_active_transferId", id); } catch {}
+}
+
+function clearActiveTransferId() {
+  try { sessionStorage.removeItem("prism_active_transferId"); } catch {}
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export function PacketReceiver() {
   const { settings } = useSettings();
   const [isScanning, setIsScanning] = React.useState(true);
@@ -47,6 +94,8 @@ export function PacketReceiver() {
   const [phase, setPhase] = React.useState<ReceiverPhase>("Idle");
   const [error, setError] = React.useState<string | null>(null);
   const [downloadedBlob, setDownloadedBlob] = React.useState<{ blob: Blob; filename: string } | null>(null);
+  const [resumableSession, setResumableSession] = React.useState<TransferManifest | null>(null);
+  const [showResumeBanner, setShowResumeBanner] = React.useState(false);
 
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
   const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
@@ -54,17 +103,70 @@ export function PacketReceiver() {
   const timestampRef = React.useRef(Date.now());
   const [debugPackets, setDebugPackets] = React.useState<DebugPacket[]>([]);
 
-  // Update phase to Camera Ready initially
+  // ── Initial phase transition ─────────────────────────────────────────────
   React.useEffect(() => {
     if (phase === "Idle") {
       setPhase("Camera Ready");
     }
   }, [phase]);
 
-  const addDebugPacket = (packet: DebugPacket) => {
-    setDebugPackets(prev => [packet, ...prev].slice(0, 100)); // Keep last 100 packets
+  // ── Check for resumable session on mount ─────────────────────────────────
+  React.useEffect(() => {
+    findResumableSession().then((found) => {
+      if (found) {
+        setResumableSession(found);
+        setShowResumeBanner(true);
+      }
+    });
+  }, []);
+
+  // ── Core reset — replaces window.location.reload() ───────────────────────
+  const resetSession = React.useCallback(async () => {
+    // Clean up IDB for the current session
+    if (manifest) {
+      try { await clearTransfer(manifest.transferId); } catch {}
+    }
+    clearActiveTransferId();
+
+    // Reset all state inline — no page reload
+    setManifest(null);
+    setPhase("Camera Ready");
+    setError(null);
+    setDownloadedBlob(null);
+    setDebugPackets([]);
+    setResumableSession(null);
+    setShowResumeBanner(false);
+    lastScannedRef.current = null;
+    pauseScannerRef.current = false;
+    tracker.resetProgress(0);
+    setIsScanning(true);
+  }, [manifest, tracker]);
+
+  // ── Resume a previous session ────────────────────────────────────────────
+  const handleResume = React.useCallback(async () => {
+    if (!resumableSession) return;
+    setShowResumeBanner(false);
+
+    const existingPackets = await getAllPackets(resumableSession.transferId);
+    setManifest(resumableSession);
+    tracker.resetProgress(resumableSession.totalPackets);
+    // Pre-credit already-received packets
+    existingPackets.forEach((p) => tracker.recordPacket(p.index, false));
+    setPhase("Receiving Chunks");
+    setIsScanning(true);
+  }, [resumableSession, tracker]);
+
+  const handleDismissResume = () => {
+    setShowResumeBanner(false);
+    setResumableSession(null);
   };
 
+  // ── Debug helpers ────────────────────────────────────────────────────────
+  const addDebugPacket = (packet: DebugPacket) => {
+    setDebugPackets(prev => [packet, ...prev].slice(0, 100));
+  };
+
+  // ── Scan handler ─────────────────────────────────────────────────────────
   const handleScan = async (decodedText: string) => {
     if (!isScanning || pauseScannerRef.current) return;
 
@@ -122,19 +224,20 @@ export function PacketReceiver() {
           if (valid) {
             addStage("Schema Validate", "SUCCESS", "Manifest conforms to schema");
             const m = parsed as TransferManifest;
-            
+
             // Clean up previous transfer state in IndexedDB if starting a new one
             if (manifest) {
               await clearTransfer(manifest.transferId);
             }
-            
+
             await saveManifest(m);
+            persistActiveTransferId(m.transferId);
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
-            
+
             setManifest(m);
             tracker.resetProgress(m.totalPackets);
             setPhase("Receiving Chunks");
-            
+
             pauseScannerRef.current = true;
             setTimeout(() => { pauseScannerRef.current = false; }, 100);
           } else {
@@ -152,7 +255,7 @@ export function PacketReceiver() {
           if (valid && parsed.transferId === manifest.transferId) {
             addStage("Schema Validate", "SUCCESS", `Valid packet ${parsed.index}`);
             const p = parsed as TransferPacket;
-            
+
             // Per-packet CRC validation
             const crcValid = verifyCRC(p);
             if (!crcValid) {
@@ -192,11 +295,11 @@ export function PacketReceiver() {
     addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
   };
 
-  // Reconstruction effect
+  // ── Reconstruction effect ────────────────────────────────────────────────
   React.useEffect(() => {
     if (tracker.progress.isComplete && manifest && phase === "Receiving Chunks") {
       setIsScanning(false);
-      setPhase("Verifying CRC"); // We actually do SHA validation here
+      setPhase("Verifying CRC");
 
       const run = async () => {
         try {
@@ -204,6 +307,7 @@ export function PacketReceiver() {
           setPhase("Reconstructing");
           const blob = await reconstructFile(manifest, packets);
           await clearTransfer(manifest.transferId);
+          clearActiveTransferId();
           setDownloadedBlob({ blob, filename: manifest.filename });
           setPhase("Completed");
         } catch (e) {
@@ -212,7 +316,6 @@ export function PacketReceiver() {
         }
       };
 
-      // Slight delay for UX
       setTimeout(run, 500);
     }
   }, [tracker.progress.isComplete, manifest, phase]);
@@ -220,23 +323,29 @@ export function PacketReceiver() {
   const isTerminal = phase === "Completed" || phase === "Error";
 
   // Compute speed in KB/s
-  const speedKbps = tracker.progress.packetsReceived > 0 
-    ? ((tracker.progress.packetsReceived * (manifest?.chunkSize || 0)) / 1024) / (tracker.progress.estimatedTimeRemainingMs > 0 ? (Date.now() - timestampRef.current) / 1000 : 1)
-    : 0; // rough mock
-    
-  React.useEffect(() => { if (phase === "Receiving Chunks") timestampRef.current = Date.now(); }, [phase]);
+  const speedKbps =
+    tracker.progress.packetsReceived > 0
+      ? ((tracker.progress.packetsReceived * (manifest?.chunkSize || 0)) / 1024) /
+        (tracker.progress.estimatedTimeRemainingMs > 0
+          ? (Date.now() - timestampRef.current) / 1000
+          : 1)
+      : 0;
+
+  React.useEffect(() => {
+    if (phase === "Receiving Chunks") timestampRef.current = Date.now();
+  }, [phase]);
 
   return (
     <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      
+
       {/* ── Left Column: Viewfinder / Scanner Lens ── */}
       <div className="lg:col-span-5 flex flex-col space-y-6">
         <div className="flex flex-col items-center justify-center p-6 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-3xl relative overflow-hidden group shadow-2xl">
           {/* Glass glare effect */}
           <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none z-20" />
-          
+
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Viewfinder Scanner</h2>
-          
+
           <div className="w-full max-w-[280px] aspect-square rounded-2xl overflow-hidden bg-black shadow-inner ring-1 ring-white/10 relative">
             {/* Viewfinder Target Brackets */}
             <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
@@ -244,9 +353,13 @@ export function PacketReceiver() {
             <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
             <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-cyan-400/60 z-30 pointer-events-none group-hover:border-cyan-400 transition-colors" />
 
-            {/* Glowing scanning laser line */}
-            {phase === "Receiving Chunks" && (
+            {/* Glowing scanning laser line — suppressed under reduced motion */}
+            {phase === "Receiving Chunks" && !settings.reducedMotion && (
               <div className="absolute left-[10%] right-[10%] h-[1.5px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent z-30 pointer-events-none animate-[scan_2s_ease-in-out_infinite]" />
+            )}
+            {/* Static indicator when reduced motion is on */}
+            {phase === "Receiving Chunks" && settings.reducedMotion && (
+              <div className="absolute top-1/2 left-[10%] right-[10%] h-[1.5px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent z-30 pointer-events-none" />
             )}
 
             {!isTerminal ? (
@@ -258,7 +371,11 @@ export function PacketReceiver() {
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950">
                 {phase === "Completed" ? (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-green-500/10 p-5 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="rounded-full bg-green-500/10 p-5 border border-green-500/20 shadow-[0_0_30px_rgba(34,197,94,0.15)]"
+                  >
                     <CheckCircle2 className="w-12 h-12 text-green-500" />
                   </motion.div>
                 ) : (
@@ -274,7 +391,7 @@ export function PacketReceiver() {
         {/* Security / Isolation stats */}
         <div className="p-5 bg-zinc-950/20 backdrop-blur-xl border border-zinc-800/40 rounded-2xl flex flex-col space-y-3">
           <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className={`w-2 h-2 rounded-full bg-green-400 ${settings.reducedMotion ? "" : "animate-pulse"}`} />
             <span className="text-xs font-bold uppercase tracking-wider text-green-400">Isolated Network Layer</span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
@@ -285,7 +402,7 @@ export function PacketReceiver() {
 
       {/* ── Right Column: Control Dashboard & Stats ── */}
       <div className="lg:col-span-7 flex flex-col space-y-6">
-        
+
         {/* Title */}
         <div className="space-y-1.5">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Receive Files</h1>
@@ -294,14 +411,51 @@ export function PacketReceiver() {
           </p>
         </div>
 
+        {/* ── Resume previous session banner ── */}
+        <AnimatePresence>
+          {showResumeBanner && resumableSession && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="flex items-start space-x-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl"
+            >
+              <div className="p-2 bg-indigo-500/20 rounded-xl">
+                <History className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">Incomplete transfer detected</p>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {resumableSession.filename} · {formatSize(resumableSession.originalSize)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  className="h-8 rounded-lg text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
+                  onClick={handleResume}
+                >
+                  Resume
+                </Button>
+                <button
+                  onClick={handleDismissResume}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Status Indicator */}
         <div className="flex items-center justify-between p-4 bg-zinc-950/25 backdrop-blur-xl border border-zinc-800/40 rounded-2xl relative overflow-hidden group">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent pointer-events-none" />
           <div className="flex flex-col z-10">
             <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Transfer State</span>
             <div className="flex items-center space-x-2.5 mt-1.5">
-              {phase === "Camera Ready" || phase === "QR Detected" ? <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" /> : null}
-              {phase === "Receiving Chunks" ? <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" /> : null}
+              {phase === "Camera Ready" || phase === "QR Detected" ? <div className={`w-2.5 h-2.5 rounded-full bg-cyan-400 ${settings.reducedMotion ? "" : "animate-pulse"}`} /> : null}
+              {phase === "Receiving Chunks" ? <div className={`w-2.5 h-2.5 rounded-full bg-indigo-500 ${settings.reducedMotion ? "" : "animate-pulse"}`} /> : null}
               {(phase === "Verifying CRC" || phase === "Reconstructing") ? <Loader2 className="w-4 h-4 text-primary animate-spin" /> : null}
               {phase === "Completed" ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : null}
               {phase === "Error" ? <AlertTriangle className="w-4 h-4 text-red-500" /> : null}
@@ -326,7 +480,7 @@ export function PacketReceiver() {
                 </div>
                 <span className="text-xl font-extrabold text-indigo-400">{tracker.progress.percentage}%</span>
               </div>
-              
+
               <div className="h-2 w-full bg-muted/40 rounded-full overflow-hidden border border-zinc-800/40 p-[1px]">
                 <motion.div
                   className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
@@ -409,18 +563,18 @@ export function PacketReceiver() {
                   <span className="text-xs text-muted-foreground">{formatSize(manifest?.originalSize || 0)}</span>
                 </div>
               </div>
-              
+
               <Button
                 className="w-full h-12 rounded-xl font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/10 transition-colors"
                 onClick={() => downloadBlob(downloadedBlob.blob, downloadedBlob.filename)}
               >
                 <Download className="w-5 h-5 mr-2" /> Save to Device
               </Button>
-              
+
               <Button
                 variant="outline"
                 className="w-full h-12 rounded-xl border-zinc-800 hover:bg-zinc-900 transition-colors"
-                onClick={() => window.location.reload()}
+                onClick={resetSession}
               >
                 Receive Another File
               </Button>
@@ -435,7 +589,7 @@ export function PacketReceiver() {
             <Button
               variant="destructive"
               className="w-full h-12 rounded-xl"
-              onClick={() => window.location.reload()}
+              onClick={resetSession}
             >
               <RotateCcw className="w-4 h-4 mr-2" /> Reset Session
             </Button>

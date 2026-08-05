@@ -34,10 +34,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = React.useState(false);
 
   React.useEffect(() => {
+    // Detect the OS reduced-motion preference — used as the boot default
+    // unless the user has already saved an explicit override in localStorage.
+    const osPrefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     try {
       const stored = localStorage.getItem("prismtransfer_settings");
       if (stored) {
-        setSettings({ ...defaultSettings, ...JSON.parse(stored) });
+        const parsed = JSON.parse(stored);
+        // If the user has never explicitly set reducedMotion, respect the OS preference.
+        if (parsed.reducedMotion === undefined) {
+          parsed.reducedMotion = osPrefersReduced;
+        }
+        setSettings({ ...defaultSettings, ...parsed });
+      } else {
+        // First visit — seed from OS
+        setSettings((prev) => ({ ...prev, reducedMotion: osPrefersReduced }));
       }
     } catch (e) {
       console.warn("Failed to load settings", e);

@@ -11,6 +11,9 @@ import { CheckCircle2, RotateCcw, MonitorUp, Zap, Clock } from "lucide-react";
 export interface TransferControllerProps {
   transfer: ProcessedTransfer;
   onCancel: () => void;
+  /** When true, fires onCancel immediately on completion instead of showing the stats screen.
+   *  Use this to auto-advance to the next file in a queue. */
+  autoAdvance?: boolean;
 }
 
 export type SenderPhase = "Preparing" | "Transferring" | "Completed";
@@ -21,7 +24,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function TransferController({ transfer, onCancel }: TransferControllerProps) {
+export function TransferController({ transfer, onCancel, autoAdvance = false }: TransferControllerProps) {
   const [frames, setFrames] = React.useState<string[]>([]);
   const [phase, setPhase] = React.useState<SenderPhase>("Preparing");
   
@@ -43,7 +46,12 @@ export function TransferController({ transfer, onCancel }: TransferControllerPro
 
   const handleComplete = () => {
     setEndTime(Date.now());
-    setPhase("Completed");
+    if (autoAdvance) {
+      // Skip the completion screen and advance the caller's queue immediately
+      onCancel();
+    } else {
+      setPhase("Completed");
+    }
   };
 
   const handleLoop = () => {

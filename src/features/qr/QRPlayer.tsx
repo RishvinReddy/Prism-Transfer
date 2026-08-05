@@ -52,17 +52,29 @@ export function QRPlayer({
 }: QRPlayerProps) {
   const { settings } = useSettings();
   const config = getModeConfig(settings.reliabilityMode);
-  
+
+  // Boot FPS from settings.fps; fall back to mode config only if settings.fps is 0/unset
+  const initialFpsValue = settings.fps > 0 ? settings.fps : config.fps;
   const [isPlaying, setIsPlaying] = React.useState(true);
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [fps, setFps] = React.useState(config.fps);
+  const [fps, setFps] = React.useState(initialFpsValue);
   const [epochDuration, setEpochDuration] = React.useState(1000);
   const [isResetting, setIsResetting] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
+  // Track whether the user has manually adjusted FPS in this session.
+  // If they have, don't let a reliabilityMode change override their choice.
+  const userAdjustedFpsRef = React.useRef(false);
+
+  // Sync EC level: prefer settings.errorCorrectionLevel; fall back to mode config.
+  const ecLevel = (settings.errorCorrectionLevel ?? config.ec) as "L" | "M" | "Q" | "H";
+
   React.useEffect(() => {
-    setFps(config.fps);
-  }, [settings.reliabilityMode, config.fps]);
+    if (!userAdjustedFpsRef.current) {
+      // reliabilityMode changed and user hasn't touched FPS manually — follow the mode
+      setFps(settings.fps > 0 ? settings.fps : config.fps);
+    }
+  }, [settings.reliabilityMode, settings.fps, config.fps]);
 
   const totalFrames = frames.length;
 
@@ -89,6 +101,11 @@ export function QRPlayer({
       intervalId = setInterval(() => {
         setCurrentIndex((prevIndex) => {
           if (prevIndex >= totalFrames - 1) {
+            // When reducedMotion is on, skip the epoch pause entirely
+            if (settings.reducedMotion) {
+              onLoop?.();
+              return 0;
+            }
             setIsResetting(true);
             onLoop?.();
             setTimeout(() => {
@@ -103,7 +120,7 @@ export function QRPlayer({
     }
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, fps, epochDuration, totalFrames, onLoop, isResetting]);
+  }, [isPlaying, fps, epochDuration, totalFrames, onLoop, isResetting, settings.reducedMotion]);
 
   // Rough simulation of speed
   const transferSpeed = fps * (manifest.chunkSize / 1024 / 1024); // MB/s
@@ -141,7 +158,7 @@ export function QRPlayer({
                 data={frames[currentIndex]} 
                 size={1024} 
                 className="w-full h-full" 
-                errorCorrectionLevel={config.ec}
+                errorCorrectionLevel={ecLevel}
               />
               
               {/* Optional subtle visual indicator for sync pause in developer mode */}
@@ -303,7 +320,7 @@ export function QRPlayer({
                     </div>
                     <div className="flex justify-between"><span>Protocol Version</span><span className="text-white font-bold">Optical v{manifest.version || 2}</span></div>
                     <div className="flex justify-between"><span>Chunk Size</span><span className="text-white font-bold">{manifest.chunkSize} bytes</span></div>
-                    <div className="flex justify-between"><span>EC Level (Redundancy)</span><span className="text-white font-bold">{config.ec} ({config.ec === 'H' ? '30%' : config.ec === 'M' ? '15%' : '7%'})</span></div>
+                    <div className="flex justify-between"><span>EC Level (Redundancy)</span><span className="text-white font-bold">{ecLevel} ({ecLevel === 'H' ? '30%' : ecLevel === 'Q' ? '25%' : ecLevel === 'M' ? '15%' : '7%'})</span></div>
                     <div className="flex justify-between"><span>CRC32 Validation</span><span className="text-emerald-500 font-bold">Enabled</span></div>
                     <div className="flex justify-between"><span>Integrity Check</span><span className="text-emerald-500 font-bold">SHA-256</span></div>
                     <div className="flex justify-between"><span>Compression Level</span><span className="text-white font-bold">Deflate (Level {settings.compressionLevel})</span></div>
@@ -330,7 +347,7 @@ export function QRPlayer({
                           ? "bg-indigo-600 hover:bg-indigo-500 text-white border-0" 
                           : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
                       )}
-                      onClick={() => setFps(v)}
+                      onClick={() => { userAdjustedFpsRef.current = true; setFps(v); }}
                     >
                       {v}
                     </Button>

@@ -147,3 +147,18 @@
 @utility scan {
   animation: scan 2s ease-in-out infinite;
 }
+
+/* ── System-level reduced-motion safety net ──────────────────────────────────
+   Catches any animation not explicitly gated at the React/component layer.
+   Works alongside settings.reducedMotion (which is seeded from this same
+   OS preference) to provide defence-in-depth.                              */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
