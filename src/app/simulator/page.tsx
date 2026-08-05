@@ -96,7 +96,7 @@ export default function SimulatorPage() {
       if (manifest && receivedCount >= manifest.totalPackets) {
         addLog("All packets received. Starting reconstruction...", "info");
         const storedPackets = await getAllPackets(manifest.transferId);
-        const blob = await reconstructFile(manifest, storedPackets);
+        const { blob } = await reconstructFile(manifest, storedPackets);
         addLog(`Reconstruction successful. Blob size: ${blob.size} bytes. Verified SHA.`, "success");
         downloadBlob(blob, "SIMULATED_" + manifest.filename);
         await clearTransfer(manifest.transferId);

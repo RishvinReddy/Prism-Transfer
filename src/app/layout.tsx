@@ -6,6 +6,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { SettingsProvider } from "@/contexts/settings";
+import { DiagnosticsProvider } from "@/contexts/diagnostics";
+import { DiagnosticsDashboard } from "@/components/diagnostics/DiagnosticsDashboard";
 
 const CANONICAL = "https://prismtransfer-rishvinreddy.vercel.app";
 
@@ -226,11 +228,14 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SettingsProvider>
-            <Navbar />
-            <main className="flex-1 flex flex-col container mx-auto px-0 max-w-none py-8">
-              {children}
-            </main>
-            <Footer />
+            <DiagnosticsProvider>
+              <Navbar />
+              <main className="flex-1 flex flex-col container mx-auto px-0 max-w-none py-8">
+                {children}
+              </main>
+              <Footer />
+              <DiagnosticsDashboard />
+            </DiagnosticsProvider>
           </SettingsProvider>
         </ThemeProvider>
       </body>

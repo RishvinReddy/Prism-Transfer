@@ -6,7 +6,7 @@ import { DEFAULT_ERROR_CORRECTION } from "@/constants/protocol";
 import { cn } from "@/lib/utils";
 
 export interface QRGeneratorProps {
-  data: string;
+  data: string | Uint8Array;
   size?: number;
   className?: string;
   errorCorrectionLevel?: "L" | "M" | "Q" | "H";
@@ -26,9 +26,13 @@ export const QRGenerator = React.memo(function QRGenerator({
 
   React.useEffect(() => {
     if (canvasRef.current && data) {
+      const qrData = data instanceof Uint8Array 
+        ? [{ data: data as any, mode: 'byte' }] // 'any' cast to bypass outdated qrcode typings if necessary
+        : data;
+
       QRCode.toCanvas(
         canvasRef.current,
-        data,
+        qrData as any,
         {
           width: size,
           margin: 6,

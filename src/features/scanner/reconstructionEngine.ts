@@ -17,13 +17,15 @@ export class ReconstructionError extends Error {
 export async function reconstructFile(
   manifest: TransferManifest,
   packets: TransferPacket[]
-): Promise<Blob> {
+): Promise<{ blob: Blob; metrics: { crcTimeMs: number; decompressTimeMs: number; shaTimeMs: number } }> {
   if (packets.length !== manifest.totalPackets) {
     throw new ReconstructionError(`Missing packets. Expected ${manifest.totalPackets}, got ${packets.length}`);
   }
 
   // 1. Sort packets by index
   packets.sort((a, b) => a.index - b.index);
+
+  const t0 = performance.now();
 
   // 2. Decode and Verify CRC for all packets (redundant check, but ensures safety)
   const decodedChunks: Uint8Array[] = [];
@@ -39,10 +41,11 @@ export async function reconstructFile(
       throw new ReconstructionError(`CRC32 validation failed for packet ${i}`);
     }
 
-    const chunkData = decodeBase64Url(packet.payload);
+    const chunkData = typeof packet.payload === "string" ? decodeBase64Url(packet.payload) : packet.payload;
     decodedChunks.push(chunkData);
     totalCompressedSize += chunkData.length;
   }
+  const t1 = performance.now();
 
   // 3. Merge chunks
   const mergedBuffer = new Uint8Array(totalCompressedSize);
@@ -59,6 +62,7 @@ export async function reconstructFile(
   } catch (error) {
     throw new ReconstructionError("Decompression failed");
   }
+  const t2 = performance.now();
 
   if (decompressedData.length !== manifest.originalSize) {
     throw new ReconstructionError(
@@ -68,12 +72,21 @@ export async function reconstructFile(
 
   // 5. Verify SHA-256
   const isValidSha = await verifySHA(decompressedData.buffer as ArrayBuffer, manifest.sha256);
+  const t3 = performance.now();
+  
   if (!isValidSha) {
     throw new ReconstructionError("Global SHA-256 verification failed. File is corrupted.");
   }
 
   // 6. Return as Blob ready for download
-  return new Blob([decompressedData as any], { type: manifest.mimeType });
+  return { 
+    blob: new Blob([decompressedData as any], { type: manifest.mimeType }),
+    metrics: {
+      crcTimeMs: Math.round(t1 - t0),
+      decompressTimeMs: Math.round(t2 - t1),
+      shaTimeMs: Math.round(t3 - t2)
+    }
+  };
 }
 
 /**

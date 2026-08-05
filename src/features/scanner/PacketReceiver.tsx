@@ -11,11 +11,13 @@ import {
   deserializeManifestV1,
   deserializePacketV1,
 } from "@/lib/serializer";
+import { isV3Packet, decodeManifestPacketV3, decodeDataPacketV3 } from "@/lib/binaryCodec";
 import { saveManifest, savePacket, getAllPackets, clearTransfer, getManifest } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/contexts/settings";
+import { useDiagnostics } from "@/contexts/diagnostics";
 import { cn } from "@/lib/utils";
 import { ReceiveDebugger, DebugPacket, DebugStage } from "./ReceiveDebugger";
 import {
@@ -95,6 +97,13 @@ function clearActiveTransferId() {
 // ─── Component ───────────────────────────────────────────────────────────────
 export function PacketReceiver() {
   const { settings } = useSettings();
+  
+  // Telemetry (fail-safe)
+  let diagnosticsCtx: ReturnType<typeof useDiagnostics> | null = null;
+  try {
+    diagnosticsCtx = useDiagnostics();
+  } catch (e) {}
+
   const [isScanning, setIsScanning] = React.useState(true);
   const [manifest, setManifest] = React.useState<TransferManifest | null>(null);
   const [phase, setPhase] = React.useState<ReceiverPhase>("Idle");
@@ -173,7 +182,7 @@ export function PacketReceiver() {
   };
 
   // ── Scan handler ─────────────────────────────────────────────────────────
-  const handleScan = async (decodedText: string) => {
+  const handleScan = async (decodedText: string, binaryData?: Uint8Array) => {
     if (!isScanning || pauseScannerRef.current) return;
 
     if (phase === "Camera Ready") {
@@ -194,13 +203,48 @@ export function PacketReceiver() {
     addStage("QR Decode", "SUCCESS", `Decoded ${decodedText.length} bytes`);
 
     let packetId = "unknown";
+    let isManifest = false;
+    let parsed: any = null;
+    let isV2 = false;
+    let isV3 = false;
+    let deserializedManifest: TransferManifest | null = null;
+    let deserializedPacket: TransferPacket | null = null;
+
     try {
-      const parsed = JSON.parse(decodedText);
-      // v2 uses short "id" field; v1 uses "packetId"; manifests get special label
-      packetId = (parsed.k === "M" || parsed.type === "manifest")
-        ? "manifest"
-        : parsed.id ?? parsed.packetId ?? "unknown";
-      addStage("JSON Parse", "SUCCESS", "Valid JSON structure");
+      if (binaryData && isV3Packet(binaryData)) {
+        isV3 = true;
+        const type = binaryData[1];
+        if (type === 0x00) { // TYPE_MANIFEST
+          isManifest = true;
+          deserializedManifest = decodeManifestPacketV3(binaryData);
+          packetId = "manifest";
+          addStage("Binary Parse", "SUCCESS", "Decoded V3 Manifest");
+        } else if (type === 0x01) { // TYPE_DATA
+          deserializedPacket = decodeDataPacketV3(binaryData);
+          packetId = deserializedPacket.packetId;
+          addStage("Binary Parse", "SUCCESS", "Decoded V3 Data Packet");
+        }
+      } else {
+        parsed = JSON.parse(decodedText);
+        // v2 uses short "id" field; v1 uses "packetId"; manifests get special label
+        packetId = (parsed.k === "M" || parsed.type === "manifest")
+          ? "manifest"
+          : parsed.id ?? parsed.packetId ?? "unknown";
+        addStage("JSON Parse", "SUCCESS", "Valid JSON structure");
+
+        isManifest = parsed.k === "M" || parsed.type === "manifest";
+        isV2 = parsed.k === "M" || (typeof parsed.v === "number" && parsed.v >= 2);
+
+        if (isManifest) {
+          deserializedManifest = isV2
+            ? deserializeManifestV2(decodedText)
+            : deserializeManifestV1(decodedText);
+        } else {
+          deserializedPacket = isV2
+            ? deserializePacketV2(decodedText)
+            : deserializePacketV1(decodedText);
+        }
+      }
 
       const now = Date.now();
       if (lastScannedRef.current && lastScannedRef.current.id === packetId) {
@@ -222,42 +266,36 @@ export function PacketReceiver() {
       lastScannedRef.current = { id: packetId, time: now };
       addStage("Debounce", "SUCCESS", `Accepted new read for ${packetId}`);
 
-      // ── Protocol routing: detect v2 (compact) vs v1 (verbose) ──────────────
-      // V2 manifests: discriminator k:"M" (instead of type:"manifest")
-      // V2 packets:   short field names, v≥2
-      // V1 manifests: type:"manifest"
-      // V1 packets:   verbose field names, version:1
-
-      const isManifest = parsed.k === "M" || parsed.type === "manifest";
-      const isV2 = parsed.k === "M" || (typeof parsed.v === "number" && parsed.v >= 2);
-
-      if (isManifest) {
+      if (isManifest && deserializedManifest) {
         // ── Manifest path ──
-        // Deserialize to full TransferManifest using the correct path
-        const deserialized: TransferManifest = isV2
-          ? deserializeManifestV2(decodedText)
-          : deserializeManifestV1(decodedText);
-
-        const isNewSession = !manifest || deserialized.transferId !== manifest.transferId;
+        const isNewSession = !manifest || deserializedManifest.transferId !== manifest.transferId;
 
         if (isNewSession) {
           setPhase("Receiving Metadata");
-          const { valid, reason } = validateManifestDetailed(parsed);
+          
+          let valid = true;
+          let reason = "";
+          
+          if (!isV3) {
+            const result = validateManifestDetailed(parsed);
+            valid = result.valid;
+            reason = result.reason || "";
+          }
 
           if (valid) {
-            addStage("Schema Validate", "SUCCESS", `v${isV2 ? 2 : 1} manifest conforms to schema`);
+            addStage("Schema Validate", "SUCCESS", `v${isV3 ? 3 : isV2 ? 2 : 1} manifest conforms to schema`);
 
             // Clean up previous transfer state in IndexedDB if starting a new one
             if (manifest) {
               await clearTransfer(manifest.transferId);
             }
 
-            await saveManifest(deserialized);
-            persistActiveTransferId(deserialized.transferId);
+            await saveManifest(deserializedManifest);
+            persistActiveTransferId(deserializedManifest.transferId);
             addStage("Store", "SUCCESS", "Manifest saved to IDB");
 
-            setManifest(deserialized);
-            tracker.resetProgress(deserialized.totalPackets);
+            setManifest(deserializedManifest);
+            tracker.resetProgress(deserializedManifest.totalPackets);
             setPhase("Receiving Chunks");
 
             pauseScannerRef.current = true;
@@ -270,21 +308,24 @@ export function PacketReceiver() {
           addStage("Identify", "SKIPPED", "Manifest already stored");
           finalStatus = "DROPPED";
         }
-      } else {
+      } else if (deserializedPacket) {
         if (manifest) {
-          const { valid, reason } = validatePacketDetailed(parsed);
+          let valid = true;
+          let reason = "";
+          if (!isV3) {
+            const result = validatePacketDetailed(parsed);
+            valid = result.valid;
+            reason = result.reason || "";
+          }
 
           if (valid) {
-            // Deserialize to full TransferPacket using the correct path
-            const p: TransferPacket = isV2
-              ? deserializePacketV2(decodedText)
-              : deserializePacketV1(decodedText);
+            const p = deserializedPacket;
 
             if (p.transferId !== manifest.transferId) {
               addStage("Schema Validate", "ERROR", `TransferId mismatch`);
               finalStatus = "ERROR";
             } else {
-              addStage("Schema Validate", "SUCCESS", `v${isV2 ? 2 : 1} packet ${p.index}`);
+              addStage("Schema Validate", "SUCCESS", `v${isV3 ? 3 : isV2 ? 2 : 1} packet ${p.index}`);
 
               // Per-packet CRC validation
               const crcValid = verifyCRC(p);
@@ -336,13 +377,54 @@ export function PacketReceiver() {
         try {
           const packets = await getAllPackets(manifest.transferId);
           setPhase("Reconstructing");
-          const blob = await reconstructFile(manifest, packets);
+
+          const worker = new Worker(new URL("../../workers/reconstruction.worker.ts", import.meta.url));
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            worker.onmessage = (e) => {
+              if (e.data.success) {
+                if (diagnosticsCtx) {
+                  diagnosticsCtx.updateReconstructionWorker({
+                    status: "Done",
+                    latencyMs: e.data.metrics?.latencyMs || 0,
+                    details: e.data.metrics?.details
+                  });
+                }
+                resolve(e.data.blob);
+              } else {
+                if (diagnosticsCtx) {
+                  diagnosticsCtx.updateReconstructionWorker({
+                    status: "Error",
+                    error: e.data.error
+                  });
+                }
+                reject(new Error(e.data.error));
+              }
+              worker.terminate();
+            };
+            worker.onerror = (e) => {
+              if (diagnosticsCtx) {
+                diagnosticsCtx.updateReconstructionWorker({
+                  status: "Error",
+                  error: "Worker failed"
+                });
+              }
+              reject(e);
+              worker.terminate();
+            };
+            
+            if (diagnosticsCtx) {
+              diagnosticsCtx.updateReconstructionWorker({ status: "Running", latencyMs: 0 });
+            }
+            
+            worker.postMessage({ manifest, packets });
+          });
+
           await clearTransfer(manifest.transferId);
           clearActiveTransferId();
           setDownloadedBlob({ blob, filename: manifest.filename });
           setPhase("Completed");
         } catch (e) {
-          setError(e instanceof ReconstructionError ? e.message : "An unknown error occurred.");
+          setError(e instanceof Error ? e.message : "An unknown error occurred.");
           setPhase("Error");
         }
       };
@@ -361,6 +443,12 @@ export function PacketReceiver() {
           ? (Date.now() - timestampRef.current) / 1000
           : 1)
       : 0;
+
+  React.useEffect(() => {
+    if (diagnosticsCtx && speedKbps > 0) {
+      diagnosticsCtx.updateProtocol({ speedKbps: Math.round(speedKbps) });
+    }
+  }, [speedKbps]);
 
   React.useEffect(() => {
     if (phase === "Receiving Chunks") timestampRef.current = Date.now();

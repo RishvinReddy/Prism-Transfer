@@ -27,7 +27,7 @@ function formatSize(bytes: number): string {
 }
 
 export function TransferController({ transfer, onCancel, autoAdvance = false }: TransferControllerProps) {
-  const [frames, setFrames] = React.useState<string[]>([]);
+  const [frames, setFrames] = React.useState<(string | Uint8Array)[]>([]);
   const [phase, setPhase] = React.useState<SenderPhase>("Preparing");
   const [initialFps, setInitialFps] = React.useState<number | undefined>(undefined);
   

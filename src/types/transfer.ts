@@ -20,8 +20,8 @@ export interface TransferPacket {
   packetId: string; // transferId:index
   index: number;
   total: number;
-  crc32: string; // hex string or number, let's use string for JSON safety/hex rep
-  payload: string; // Base64URL encoded compressed binary chunk
+  crc32: string; // hex string
+  payload: string | Uint8Array; // Base64URL string (v1/v2) or raw bytes (v3)
 }
 
 export enum TransferState {

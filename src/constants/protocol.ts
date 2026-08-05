@@ -1,7 +1,8 @@
 // ─── Protocol Version ────────────────────────────────────────────────────────
 // v1: original JSON protocol with verbose field names
 // v2: compact JSON protocol with short field names (lower envelope overhead)
-export const PROTOCOL_VERSION = 2;
+// v3: zero-copy binary framing
+export const PROTOCOL_VERSION = 3;
 
 // ─── QR Parameters ───────────────────────────────────────────────────────────
 export const DEFAULT_CHUNK_SIZE = 220;          // Legacy fallback only
@@ -14,11 +15,18 @@ export const DEFAULT_FPS = 10;
 
 // ─── Serialization constants ──────────────────────────────────────────────────
 // Used by chunker.ts to compute usable binary payload per QR frame.
-//
-// Base64URL expands binary by factor 4/3 ≈ 1.334
-// e.g. 900 binary bytes → ~1,200 chars of Base64URL
 export const BASE64_EXPANSION = 4 / 3;
 
-// Bytes reserved for the JSON envelope after Upgrade 1 (compact field names).
-// Breakdown: {"v":2,"t":"<21>","id":"<21:3>","i":999,"n":999,"c":"<8>","d":"..."} ≈ 45 bytes
-export const ENVELOPE_RESERVE_BYTES = 50;
+export function getProtocolEnvelopeReserve(version: number): number {
+  if (version >= 3) {
+    // V3 Binary Header (28 bytes) + Data fields (8 bytes) = 36 bytes
+    return 36;
+  }
+  // V2 JSON compact fields ({"v":2,"t":"...","id":"...","i":999,"n":999,"c":"<8>","d":"..."})
+  return 50;
+}
+
+export function getProtocolExpansion(version: number): number {
+  if (version >= 3) return 1.0; // Raw binary, no base64 overhead!
+  return BASE64_EXPANSION;
+}

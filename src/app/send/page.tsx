@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { processFileForTransfer, ProcessedTransfer } from "@/lib/chunker";
+import { ProcessedTransfer } from "@/lib/chunker";
 import {
   Loader2,
   FileCheck,
@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { getStagedFile } from "@/lib/fileStager";
 import { useSettings } from "@/contexts/settings";
+import { useDiagnostics } from "@/contexts/diagnostics";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,12 @@ async function collectDroppedFiles(dataTransfer: DataTransfer): Promise<File[]> 
 
 export default function SendPage() {
   const { settings, updateSettings } = useSettings();
+  
+  // Telemetry (fail-safe)
+  let diagnosticsCtx: ReturnType<typeof useDiagnostics> | null = null;
+  try {
+    diagnosticsCtx = useDiagnostics();
+  } catch (e) {}
 
   // File queue
   const [fileQueue, setFileQueue] = React.useState<File[]>([]);
@@ -114,9 +121,60 @@ export default function SendPage() {
     setIsProcessing(true);
     setResult(null);
     setInlineError(null);
+    
+    if (diagnosticsCtx) {
+      diagnosticsCtx.updateSenderWorker({ status: "Running", latencyMs: 0 });
+    }
 
     try {
-      const processed = await processFileForTransfer(file, settings);
+      const worker = new Worker(new URL("../../workers/sender.worker.ts", import.meta.url));
+      
+      const processed = await new Promise<ProcessedTransfer>((resolve, reject) => {
+        worker.onmessage = (e) => {
+          if (e.data.success) {
+            setResult(e.data.result);
+            
+            if (diagnosticsCtx) {
+              diagnosticsCtx.updateSenderWorker({
+                status: "Done",
+                latencyMs: e.data.metrics?.latencyMs || 0,
+                details: e.data.metrics?.details
+              });
+              
+              const activeVersion = e.data.result.manifest.version;
+              const chunkSize = e.data.result.manifest.chunkSize;
+              const payloadEfficiencyPercent = Math.round(
+                (e.data.result.manifest.originalSize / 
+                 (e.data.result.manifest.totalPackets * e.data.result.manifest.chunkSize)) * 100
+              );
+              
+              diagnosticsCtx.updateProtocol({
+                activeVersion,
+                chunkSize,
+                payloadEfficiencyPercent,
+                totalPackets: e.data.result.manifest.totalPackets
+              });
+            }
+            resolve(e.data.result);
+          } else {
+            setInlineError(e.data.error || "Failed to process file");
+            if (diagnosticsCtx) {
+              diagnosticsCtx.updateSenderWorker({
+                status: "Error",
+                error: e.data.error
+              });
+            }
+            reject(new Error(e.data.error));
+          }
+          worker.terminate();
+        };
+        worker.onerror = (e) => {
+          reject(e);
+          worker.terminate();
+        };
+        worker.postMessage({ file, options: settings });
+      });
+
       setResult(processed);
     } catch (error) {
       console.error("Error processing file:", error);

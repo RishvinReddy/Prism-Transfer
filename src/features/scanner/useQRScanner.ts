@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import jsQR from "jsqr";
+import { useDiagnostics } from "@/contexts/diagnostics";
 
 interface UseQRScannerOptions {
-  onScan: (data: string) => void;
+  onScan: (data: string, binaryData?: Uint8Array) => void;
   isScanning: boolean;
   targetFps?: number;
   facingMode?: "environment" | "user";
@@ -35,10 +35,66 @@ export function useQRScanner({
     lastFrameMs: 0
   });
 
+  const workerRef = React.useRef<Worker | null>(null);
+  const workerBusyRef = React.useRef<boolean>(false);
+  const lastDecodeStartRef = React.useRef<number>(0);
+  
+  // Optional diagnostics context (fail-safe if used outside provider)
+  let diagnosticsCtx: ReturnType<typeof useDiagnostics> | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    diagnosticsCtx = useDiagnostics();
+  } catch (e) {}
+  
+  const updateCamera = diagnosticsCtx?.updateCamera;
+
   const onScanRef = React.useRef(onScan);
   React.useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
+
+  React.useEffect(() => {
+    const worker = new Worker(new URL("../../workers/scanner.worker.ts", import.meta.url));
+    workerRef.current = worker;
+    
+    worker.onmessage = (e) => {
+      workerBusyRef.current = false;
+      const decodeTime = performance.now() - lastDecodeStartRef.current;
+      
+      setDiagnostics(prev => ({
+        ...prev,
+        decoderState: "Running",
+        lastFrameMs: Math.round(decodeTime)
+      }));
+
+      const { success, data, binaryData, error, latencyMs } = e.data;
+      
+      if (diagnosticsCtx) {
+        diagnosticsCtx.updateScannerWorker({
+          status: "Running",
+          latencyMs: latencyMs || Math.round(decodeTime)
+        });
+        diagnosticsCtx.updateCamera({ decodeLatencyMs: Math.round(decodeTime) });
+      }
+
+      if (success && (data || binaryData)) {
+        setDiagnostics(prev => {
+          const newFrames = prev.decodedFrames + 1;
+          if (updateCamera) updateCamera({ decodedFrames: newFrames });
+          return { ...prev, decodedFrames: newFrames };
+        });
+        const binaryArray = binaryData ? new Uint8Array(binaryData) : undefined;
+        onScanRef.current(data, binaryArray);
+      } else if (!success) {
+        if (diagnosticsCtx) diagnosticsCtx.updateScannerWorker({ status: "Error", error });
+        console.error("Scanner worker error:", error);
+      }
+    };
+
+    return () => {
+      worker.terminate();
+    };
+  }, []);
 
   // Keep a stable ref to the current facingMode so startCamera can be called
   // without re-registering effects every time it changes.
@@ -168,27 +224,35 @@ export function useQRScanner({
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
     if (ctx) {
+      if (workerBusyRef.current) {
+        if (diagnosticsCtx) {
+          diagnosticsCtx.updateCamera({ droppedFrames: diagnosticsCtx.state.camera.droppedFrames + 1 });
+        }
+        requestRef.current = requestAnimationFrame(scanFrame);
+        return;
+      }
+
       // Draw only the cropped region, scaling it down if necessary
       ctx.drawImage(video, sx, sy, scanSize, scanSize, 0, 0, targetSize, targetSize);
       const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
 
-      const decodeStart = performance.now();
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "attemptBoth",
+      workerBusyRef.current = true;
+      lastDecodeStartRef.current = performance.now();
+      
+      setDiagnostics(prev => {
+        const next = { ...prev, fps: Math.round(currentFps) };
+        if (updateCamera) updateCamera({ fps: next.fps });
+        return next;
       });
-      const decodeTime = performance.now() - decodeStart;
 
-      setDiagnostics(prev => ({
-        ...prev,
-        decoderState: "Running",
-        fps: Math.round(currentFps),
-        lastFrameMs: Math.round(decodeTime)
-      }));
-
-      if (code) {
-        setDiagnostics(prev => ({ ...prev, decodedFrames: prev.decodedFrames + 1 }));
-        onScanRef.current(code.data);
-      }
+      workerRef.current?.postMessage(
+        {
+          buffer: imageData.data.buffer,
+          width: imageData.width,
+          height: imageData.height,
+        },
+        [imageData.data.buffer] // Transfer the buffer for zero-copy
+      );
     }
 
     requestRef.current = requestAnimationFrame(scanFrame);

@@ -1,4 +1,4 @@
-import { BASE64_EXPANSION, ENVELOPE_RESERVE_BYTES } from "@/constants/protocol";
+import { getProtocolEnvelopeReserve, getProtocolExpansion, PROTOCOL_VERSION } from "@/constants/protocol";
 
 /**
  * QR capacity lookup table — binary byte capacity per QR version + EC level.
@@ -178,11 +178,11 @@ export function computeMaxChunkSize(
     return 150;
   }
 
-  const availableForPayload = capacityBytes - ENVELOPE_RESERVE_BYTES;
+  const availableForPayload = capacityBytes - getProtocolEnvelopeReserve(PROTOCOL_VERSION);
   if (availableForPayload <= 0) return 50;
 
-  // Base64URL encoded string chars → binary bytes
-  const maxBinaryBytes = Math.floor(availableForPayload / BASE64_EXPANSION);
+  // Base64URL encoded string chars → binary bytes (for V3, factor is 1.0)
+  const maxBinaryBytes = Math.floor(availableForPayload / getProtocolExpansion(PROTOCOL_VERSION));
 
   // Apply safety factor and enforce floor
   return Math.max(50, Math.floor(maxBinaryBytes * safetyFactor));

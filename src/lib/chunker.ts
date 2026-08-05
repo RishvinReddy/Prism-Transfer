@@ -74,6 +74,11 @@ export function calculateOptimalChunkSize(
 export interface ProcessedTransfer {
   manifest: TransferManifest;
   packets: TransferPacket[];
+  metrics?: {
+    shaTimeMs: number;
+    compressTimeMs: number;
+    chunkTimeMs: number;
+  };
 }
 
 // ─── Main pipeline ────────────────────────────────────────────────────────────
@@ -103,7 +108,9 @@ export async function processFileForTransfer(
   const originalSize = arrayBuffer.byteLength;
 
   // 2. SHA-256 of original (uncompressed) data — used for final integrity check
+  const t0 = performance.now();
   const sha256 = await calculateSHA256(arrayBuffer);
+  const t1 = performance.now();
 
   // 3. Compress
   const uncompressedData = new Uint8Array(arrayBuffer);
@@ -112,6 +119,7 @@ export async function processFileForTransfer(
       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
   });
   const compressedSize = compressed.byteLength;
+  const t2 = performance.now();
 
   // 4. Determine chunk size from real QR capacity
   const chunkSize = calculateOptimalChunkSize(options, compressedSize);
@@ -126,7 +134,7 @@ export async function processFileForTransfer(
     const chunkBytes = compressed.slice(start, end);
 
     const crc32 = calculateCRC32(chunkBytes);
-    const payload = encodeBase64Url(chunkBytes);
+    const payload = PROTOCOL_VERSION >= 3 ? chunkBytes : encodeBase64Url(chunkBytes);
 
     packets.push({
       version:    PROTOCOL_VERSION,
@@ -138,6 +146,7 @@ export async function processFileForTransfer(
       payload,
     });
   }
+  const t3 = performance.now();
 
   // 6. Manifest
   const manifest: TransferManifest = {
@@ -154,5 +163,13 @@ export async function processFileForTransfer(
     createdAt,
   };
 
-  return { manifest, packets };
+  return { 
+    manifest, 
+    packets,
+    metrics: {
+      shaTimeMs: Math.round(t1 - t0),
+      compressTimeMs: Math.round(t2 - t1),
+      chunkTimeMs: Math.round(t3 - t2)
+    }
+  };
 }

@@ -124,7 +124,7 @@ export function validatePacketDetailed(
  */
 export function verifyCRC(packet: TransferPacket): boolean {
   try {
-    const chunkBytes = decodeBase64Url(packet.payload);
+    const chunkBytes = typeof packet.payload === "string" ? decodeBase64Url(packet.payload) : packet.payload;
     const computedCrc = calculateCRC32(chunkBytes);
     return computedCrc === packet.crc32;
   } catch {

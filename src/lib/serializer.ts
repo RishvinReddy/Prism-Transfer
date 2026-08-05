@@ -1,4 +1,6 @@
 import { TransferManifest, TransferPacket } from "@/types/transfer";
+import { PROTOCOL_VERSION } from "@/constants/protocol";
+import { encodeDataPacketV3, encodeManifestPacketV3 } from "./binaryCodec";
 
 // ─── V2 Wire Format (compact field names) ────────────────────────────────────
 //
@@ -61,7 +63,7 @@ export function serializePacketV2(packet: TransferPacket): string {
     i:  packet.index,
     n:  packet.total,
     c:  packet.crc32,
-    d:  packet.payload,
+    d:  packet.payload as string,
   };
   return JSON.stringify(wire);
 }
@@ -152,11 +154,21 @@ export function deserializeManifestV1(json: string): TransferManifest {
 // All callers (TransferController, QRPlayer, etc.) import these names.
 // Swapping to V2 here is invisible to callers.
 
-/** Serialize a packet for QR encoding (v2 compact format). */
-export const serializePacket = serializePacketV2;
+/** Serialize a packet for QR encoding (v3 binary or v2 compact). */
+export function serializePacket(packet: TransferPacket): string | Uint8Array {
+  if (PROTOCOL_VERSION >= 3) {
+    return encodeDataPacketV3(packet);
+  }
+  return serializePacketV2(packet);
+}
 
-/** Serialize a manifest for QR encoding (v2 compact format). */
-export const serializeManifest = serializeManifestV2;
+/** Serialize a manifest for QR encoding (v3 binary or v2 compact). */
+export function serializeManifest(manifest: TransferManifest): string | Uint8Array {
+  if (PROTOCOL_VERSION >= 3) {
+    return encodeManifestPacketV3(manifest);
+  }
+  return serializeManifestV2(manifest);
+}
 
 // ─── Size estimation utilities ────────────────────────────────────────────────
 

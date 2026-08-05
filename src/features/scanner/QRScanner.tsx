@@ -8,7 +8,7 @@ import { FlipHorizontal, RefreshCcw, ShieldAlert, Camera, CameraOff } from "luci
 import { Button } from "@/components/ui/button";
 
 export interface QRScannerProps {
-  onScan: (decodedText: string) => void;
+  onScan: (decodedText: string, binaryData?: Uint8Array) => void;
   isScanning: boolean;
   hasManifest?: boolean;
   scanQuality?: "excellent" | "good" | "poor";

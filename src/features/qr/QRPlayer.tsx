@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { ThroughputGraph } from "./ThroughputGraph";
 
 export interface QRPlayerProps {
-  frames: string[]; 
+  frames: (string | Uint8Array)[];
   manifest: TransferManifest;
   onCancel: () => void;
   onComplete?: () => void;
