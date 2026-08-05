@@ -136,7 +136,7 @@ export function verifyCRC(packet: TransferPacket): boolean {
  * Verifies SHA-256 of the fully reconstructed file against the manifest hash.
  */
 export async function verifySHA(
-  reconstructedBuffer: ArrayBuffer,
+  reconstructedBuffer: BufferSource,
   expectedSha256: string
 ): Promise<boolean> {
   try {

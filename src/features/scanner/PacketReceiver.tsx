@@ -15,6 +15,7 @@ import { isV3Packet, decodeManifestPacketV3, decodeDataPacketV3 } from "@/lib/bi
 import { saveManifest, savePacket, getAllPackets, clearTransfer, getManifest } from "@/features/storage/packetStore";
 import { reconstructFile, downloadBlob, ReconstructionError } from "./reconstructionEngine";
 import { TransferManifest, TransferPacket } from "@/types/transfer";
+import { AdaptiveTransferController } from "../transfer/AdaptiveTransferController";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/contexts/settings";
 import { useDiagnostics } from "@/contexts/diagnostics";
@@ -111,6 +112,8 @@ export function PacketReceiver() {
   const [downloadedBlob, setDownloadedBlob] = React.useState<{ blob: Blob; filename: string } | null>(null);
   const [resumableSession, setResumableSession] = React.useState<TransferManifest | null>(null);
   const [showResumeBanner, setShowResumeBanner] = React.useState(false);
+  const adaptiveController = React.useRef(new AdaptiveTransferController());
+  const [recommendations, setRecommendations] = React.useState(adaptiveController.current.recommend());
 
   const tracker = useProgressTracker(manifest?.totalPackets || 0);
   const lastScannedRef = React.useRef<{ id: string; time: number } | null>(null);
@@ -183,6 +186,11 @@ export function PacketReceiver() {
 
   // ── Scan handler ─────────────────────────────────────────────────────────
   const handleScan = async (decodedText: string, binaryData?: Uint8Array) => {
+    if (diagnosticsCtx) {
+      adaptiveController.current.observe(diagnosticsCtx.state);
+      setRecommendations(adaptiveController.current.recommend());
+    }
+
     if (!isScanning || pauseScannerRef.current) return;
 
     if (phase === "Camera Ready") {
@@ -247,9 +255,10 @@ export function PacketReceiver() {
       }
 
       const now = Date.now();
+      const currentDebounce = recommendations.debounceMs;
       if (lastScannedRef.current && lastScannedRef.current.id === packetId) {
-        if (now - lastScannedRef.current.time < 200) {
-          addStage("Debounce", "SKIPPED", `Ignored duplicate within 200ms`);
+        if (now - lastScannedRef.current.time < currentDebounce) {
+          addStage("Debounce", "SKIPPED", `Ignored duplicate within ${currentDebounce}ms`);
           finalStatus = "DROPPED";
           addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
           return;
@@ -481,11 +490,20 @@ export function PacketReceiver() {
               <div className="absolute top-1/2 left-[10%] right-[10%] h-[1.5px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent z-30 pointer-events-none" />
             )}
 
+            {/* Alerts from Adaptive Engine */}
+            {recommendations.alertMessage && phase === "Receiving Chunks" && (
+              <div className="absolute top-4 left-4 right-4 z-40 bg-orange-950/90 border border-orange-500/50 text-orange-200 text-xs p-2 rounded-lg backdrop-blur-md shadow-lg text-center font-medium flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
+                <AlertTriangle className="w-4 h-4" />
+                {recommendations.alertMessage}
+              </div>
+            )}
+
             {!isTerminal ? (
               <QRScanner
                 isScanning={isScanning}
                 onScan={handleScan}
                 hasManifest={!!manifest}
+                targetFps={recommendations.throttleFps}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950">

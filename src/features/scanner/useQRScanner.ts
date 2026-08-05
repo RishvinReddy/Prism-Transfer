@@ -6,7 +6,7 @@ import { useDiagnostics } from "@/contexts/diagnostics";
 interface UseQRScannerOptions {
   onScan: (data: string, binaryData?: Uint8Array) => void;
   isScanning: boolean;
-  targetFps?: number;
+  targetFps?: number | null;
   facingMode?: "environment" | "user";
 }
 
@@ -193,16 +193,19 @@ export function useQRScanner({
     }
 
     const now = performance.now();
-    const minFrameTime = 1000 / targetFps;
-
-    // Throttle decoding to target FPS
-    if (now - lastScanTimeRef.current < minFrameTime) {
-      requestRef.current = requestAnimationFrame(scanFrame);
-      return;
+    let currentFps = 0;
+    
+    if (targetFps !== null) {
+      const minFrameTime = 1000 / targetFps;
+      // Throttle decoding to target FPS
+      if (now - lastScanTimeRef.current < minFrameTime) {
+        requestRef.current = requestAnimationFrame(scanFrame);
+        return;
+      }
     }
 
     // Update FPS metric
-    const currentFps = 1000 / (now - lastScanTimeRef.current);
+    currentFps = 1000 / Math.max(1, (now - lastScanTimeRef.current));
     lastScanTimeRef.current = now;
 
     // Calculate crop region (matching the UI's object-cover square with 10% padding)

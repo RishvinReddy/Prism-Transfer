@@ -71,7 +71,7 @@ export async function reconstructFile(
   }
 
   // 5. Verify SHA-256
-  const isValidSha = await verifySHA(decompressedData.buffer as ArrayBuffer, manifest.sha256);
+  const isValidSha = await verifySHA(decompressedData as any, manifest.sha256);
   const t3 = performance.now();
   
   if (!isValidSha) {

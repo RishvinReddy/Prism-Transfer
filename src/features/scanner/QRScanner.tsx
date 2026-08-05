@@ -12,9 +12,10 @@ export interface QRScannerProps {
   isScanning: boolean;
   hasManifest?: boolean;
   scanQuality?: "excellent" | "good" | "poor";
+  targetFps?: number | null;
 }
 
-export function QRScanner({ onScan, isScanning, hasManifest, scanQuality }: QRScannerProps) {
+export function QRScanner({ onScan, isScanning, hasManifest, scanQuality, targetFps }: QRScannerProps) {
   const { settings } = useSettings();
 
   // Local camera-facing override (toggled by Switch Camera button)
@@ -31,7 +32,7 @@ export function QRScanner({ onScan, isScanning, hasManifest, scanQuality }: QRSc
     useQRScanner({
       onScan,
       isScanning,
-      targetFps: settings.fps,
+      targetFps: targetFps !== undefined ? targetFps : settings.fps,
       facingMode,
     });
 
