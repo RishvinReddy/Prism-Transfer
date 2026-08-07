@@ -10,6 +10,7 @@ export interface QRGeneratorProps {
   size?: number;
   className?: string;
   errorCorrectionLevel?: "L" | "M" | "Q" | "H";
+  quietZone?: number;
 }
 
 /**
@@ -20,7 +21,8 @@ export const QRGenerator = React.memo(function QRGenerator({
   data, 
   size = 400, 
   className,
-  errorCorrectionLevel = DEFAULT_ERROR_CORRECTION as any
+  errorCorrectionLevel = DEFAULT_ERROR_CORRECTION as any,
+  quietZone = 6
 }: QRGeneratorProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
@@ -35,7 +37,7 @@ export const QRGenerator = React.memo(function QRGenerator({
         qrData as any,
         {
           width: size,
-          margin: 6,
+          margin: quietZone,
           errorCorrectionLevel: errorCorrectionLevel as any,
           color: {
             dark: "#000000",

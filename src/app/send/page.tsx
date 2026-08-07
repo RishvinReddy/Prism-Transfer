@@ -26,7 +26,7 @@ import { getStagedFile } from "@/lib/fileStager";
 import { useSettings } from "@/contexts/settings";
 import { useDiagnostics } from "@/contexts/diagnostics";
 import { TransferAdvisor } from "@/features/transfer/TransferAdvisor";
-import { TransferOptions } from "@/types/transfer";
+import { TransferOptions, TransferStrategy } from "@/types/transfer";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -91,8 +91,9 @@ export default function SendPage() {
   const [queueIndex, setQueueIndex] = React.useState(0); // which file in the queue is active
 
   // Processing / transfer state
-  const [isProcessing, setIsProcessing] = React.useState(false);
   const [result, setResult] = React.useState<ProcessedTransfer | null>(null);
+  const [activeStrategy, setActiveStrategy] = React.useState<TransferStrategy | null>(null);
+  const [isProcessing, setIsProcessing] = React.useState(false);
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isAdvising, setIsAdvising] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -120,9 +121,10 @@ export default function SendPage() {
   }, [settings.reliabilityMode]);
 
   // ── File processing ──────────────────────────────────────────────────────
-  const processFile = async (file: File, optionsOverride?: TransferOptions) => {
+  const processFile = async (file: File, strategy?: TransferStrategy) => {
     setIsProcessing(true);
     setResult(null);
+    setActiveStrategy(strategy || null);
     setInlineError(null);
     
     if (diagnosticsCtx) {
@@ -175,7 +177,21 @@ export default function SendPage() {
           reject(e);
           worker.terminate();
         };
-        worker.postMessage({ file, options: optionsOverride || settings });
+
+        let options: TransferOptions = settings;
+        if (strategy) {
+          options = {
+            ...settings,
+            fps: strategy.fps,
+            chunkSizeOverride: strategy.chunkSize,
+            qrVersion: strategy.qrVersion,
+            qrQuietZone: strategy.qrQuietZone,
+            parityGroupSize: Math.max(1, Math.round(1 / strategy.parityRatio)),
+            reliabilityMode: strategy.preset,
+          };
+        }
+
+        worker.postMessage({ file, options });
       });
 
       setResult(processed);
@@ -326,6 +342,7 @@ export default function SendPage() {
         )}
         <TransferController
           transfer={result}
+          strategy={activeStrategy || undefined}
           onCancel={handleCancelTransfer}
           autoAdvance={!isLastFile}
           // When autoAdvance fires (not-last file), advance queue
@@ -343,9 +360,9 @@ export default function SendPage() {
       <div className="flex flex-col items-center max-w-3xl mx-auto w-full px-4 space-y-8 mt-4">
         <TransferAdvisor 
           file={fileQueue[queueIndex]} 
-          onAccept={(opts) => {
+          onAccept={(strategy) => {
             setIsAdvising(false);
-            processFile(fileQueue[queueIndex], opts);
+            processFile(fileQueue[queueIndex], strategy);
           }}
           onCancel={() => {
             setIsAdvising(false);

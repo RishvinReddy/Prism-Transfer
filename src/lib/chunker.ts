@@ -156,11 +156,12 @@ export async function processFileForTransfer(
   }
   
   // 5.5 Generate Parity Packets
-  const totalParityPackets = Math.ceil(totalDataPackets / PARITY_GROUP_SIZE);
+  const activeParityGroupSize = options?.parityGroupSize ?? PARITY_GROUP_SIZE;
+  const totalParityPackets = Math.ceil(totalDataPackets / activeParityGroupSize);
   for (let pIndex = 0; pIndex < totalParityPackets; pIndex++) {
     const parityBytes = new Uint8Array(chunkSize);
-    const startIndex = pIndex * PARITY_GROUP_SIZE;
-    const endIndex = Math.min(startIndex + PARITY_GROUP_SIZE, totalDataPackets);
+    const startIndex = pIndex * activeParityGroupSize;
+    const endIndex = Math.min(startIndex + activeParityGroupSize, totalDataPackets);
     
     const algo = RecoveryRegistry["xor"];
     if (algo) {
@@ -194,7 +195,7 @@ export async function processFileForTransfer(
     chunkSize,
     totalDataPackets,
     totalParityPackets,
-    parityGroupSize:      PARITY_GROUP_SIZE,
+    parityGroupSize:      activeParityGroupSize,
     parityAlgorithm:      "xor",
     sha256,
     compressionAlgorithm: "deflate",

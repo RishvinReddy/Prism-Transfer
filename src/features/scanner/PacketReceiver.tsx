@@ -130,6 +130,7 @@ export function PacketReceiver() {
   const pauseScannerRef = React.useRef<boolean>(false);
   const timestampRef = React.useRef(Date.now());
   const [debugPackets, setDebugPackets] = React.useState<DebugPacket[]>([]);
+  const [environmentWarning, setEnvironmentWarning] = React.useState<string | null>(null);
 
   const [resumeStats, setResumeStats] = React.useState<{ received: number; missing: number; percentage: number; lastActiveMs: number } | null>(null);
 
@@ -588,6 +589,14 @@ export function PacketReceiver() {
                 {recommendations.alertMessage}
               </div>
             )}
+            
+            {/* Environment Warning from Camera */}
+            {environmentWarning && !recommendations.alertMessage && phase !== "Completed" && (
+              <div className="absolute top-4 left-4 right-4 z-40 bg-yellow-950/90 border border-yellow-500/50 text-yellow-200 text-xs p-2 rounded-lg backdrop-blur-md shadow-lg text-center font-medium flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
+                <AlertTriangle className="w-4 h-4" />
+                {environmentWarning}
+              </div>
+            )}
 
             {!isTerminal ? (
               <QRScanner
@@ -595,6 +604,7 @@ export function PacketReceiver() {
                 onScan={handleScan}
                 hasManifest={!!manifest}
                 targetFps={recommendations.throttleFps}
+                onEnvironmentWarning={setEnvironmentWarning}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950">

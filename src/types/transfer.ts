@@ -38,13 +38,31 @@ export enum TransferState {
   Error = "error",
 }
 
+export interface ErrorCorrectionProfile {
+  parityRatio: number;
+  groupSize: number;
+  redundancy: number; // percentage
+}
+
+export interface TransferStrategy {
+  fps: number;
+  chunkSize: number;
+  qrVersion: number;
+  qrQuietZone: number;
+  parityRatio: number;
+  preset: "turbo" | "balanced" | "reliable";
+  confidence: number;
+}
+
 export interface TransferOptions {
   compressionLevel?: number; // 0-9
   qrVersion?: number; // 1-40
+  qrQuietZone?: number;
   errorCorrectionLevel?: "L" | "M" | "Q" | "H";
   chunkSizeOverride?: number; // Bytes of binary payload per chunk (before encoding)
   reliabilityMode?: "speed" | "balanced" | "reliable" | "turbo";
   fps?: number; // Playback FPS override
+  parityGroupSize?: number;
 }
 
 export interface TransferStats {

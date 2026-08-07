@@ -12,6 +12,7 @@ import { CheckCircle2, RotateCcw, MonitorUp, Zap, Clock } from "lucide-react";
 
 export interface TransferControllerProps {
   transfer: ProcessedTransfer;
+  strategy?: import("@/types/transfer").TransferStrategy;
   onCancel: () => void;
   /** When true, fires onCancel immediately on completion instead of showing the stats screen.
    *  Use this to auto-advance to the next file in a queue. */
@@ -26,10 +27,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function TransferController({ transfer, onCancel, autoAdvance = false }: TransferControllerProps) {
+export function TransferController({ transfer, strategy, onCancel, autoAdvance = false }: TransferControllerProps) {
   const [frames, setFrames] = React.useState<(string | Uint8Array)[]>([]);
   const [phase, setPhase] = React.useState<SenderPhase>("Preparing");
-  const [initialFps, setInitialFps] = React.useState<number | undefined>(undefined);
+  const [initialFps, setInitialFps] = React.useState<number | undefined>(strategy?.fps);
   
   // Stats
   const [startTime, setStartTime] = React.useState<number>(0);
@@ -43,8 +44,16 @@ export function TransferController({ transfer, onCancel, autoAdvance = false }: 
     
     // The sequence is strictly: Manifest, then Packets 1..N
     setFrames([serializedManifest, ...serializedPackets]);
-    setPhase("Calibrating");
-  }, [transfer]);
+    
+    if (strategy?.fps) {
+      // If we have an adaptive strategy, skip calibration
+      setInitialFps(strategy.fps);
+      setPhase("Transferring");
+      setStartTime(Date.now());
+    } else {
+      setPhase("Calibrating");
+    }
+  }, [transfer, strategy]);
 
   const handleCalibrationComplete = (result: CalibrationResult) => {
     setInitialFps(result.recommendedFps);

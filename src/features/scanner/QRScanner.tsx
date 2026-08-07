@@ -13,9 +13,10 @@ export interface QRScannerProps {
   hasManifest?: boolean;
   scanQuality?: "excellent" | "good" | "poor";
   targetFps?: number | null;
+  onEnvironmentWarning?: (warning: string | null) => void;
 }
 
-export function QRScanner({ onScan, isScanning, hasManifest, scanQuality, targetFps }: QRScannerProps) {
+export function QRScanner({ onScan, isScanning, hasManifest, scanQuality, targetFps, onEnvironmentWarning }: QRScannerProps) {
   const { settings } = useSettings();
 
   // Local camera-facing override (toggled by Switch Camera button)
@@ -28,13 +29,19 @@ export function QRScanner({ onScan, isScanning, hasManifest, scanQuality, target
     setFacingMode(settings.cameraPreference);
   }, [settings.cameraPreference]);
 
-  const { videoRef, canvasRef, error, errorType, isCameraReady, diagnostics, retryCamera } =
+  const { videoRef, canvasRef, error, errorType, isCameraReady, diagnostics, environmentWarning, retryCamera } =
     useQRScanner({
       onScan,
       isScanning,
       targetFps: targetFps !== undefined ? targetFps : settings.fps,
       facingMode,
     });
+
+  React.useEffect(() => {
+    if (onEnvironmentWarning) {
+      onEnvironmentWarning(environmentWarning);
+    }
+  }, [environmentWarning, onEnvironmentWarning]);
 
   const qualityColor =
     scanQuality === "excellent"

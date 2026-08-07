@@ -25,6 +25,8 @@ export function useQRScanner({
   const [errorType, setErrorType] = React.useState<"NotAllowed" | "NotFound" | "Generic" | null>(null);
   const [isCameraReady, setIsCameraReady] = React.useState(false);
 
+  const [environmentWarning, setEnvironmentWarning] = React.useState<string | null>(null);
+
   // Diagnostics state
   const [diagnostics, setDiagnostics] = React.useState({
     resolution: "Unknown",
@@ -235,9 +237,30 @@ export function useQRScanner({
         return;
       }
 
-      // Draw only the cropped region, scaling it down if necessary
       ctx.drawImage(video, sx, sy, scanSize, scanSize, 0, 0, targetSize, targetSize);
       const imageData = ctx.getImageData(0, 0, targetSize, targetSize);
+
+      // Simple Environment Detection (Brightness / Glare)
+      let lumaSum = 0;
+      let samples = 0;
+      for (let i = 0; i < imageData.data.length; i += 16) {
+        // Step by 4 pixels (16 bytes)
+        const r = imageData.data[i];
+        const g = imageData.data[i + 1];
+        const b = imageData.data[i + 2];
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        lumaSum += luma;
+        samples++;
+      }
+      const avgLuma = lumaSum / samples;
+      
+      if (avgLuma < 30) {
+        setEnvironmentWarning("Too dark. Move to a brighter environment.");
+      } else if (avgLuma > 230) {
+        setEnvironmentWarning("Too bright (glare detected). Adjust angle.");
+      } else {
+        setEnvironmentWarning(null);
+      }
 
       workerBusyRef.current = true;
       lastDecodeStartRef.current = performance.now();
@@ -295,6 +318,7 @@ export function useQRScanner({
     errorType,
     isCameraReady,
     diagnostics,
+    environmentWarning,
     retryCamera,
     startCamera,
   };

@@ -8,37 +8,9 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/contexts/settings";
-import { PrismProfile, ProfileManager } from "@/lib/profile";
-import { BenchmarkEngine } from "@/lib/benchmark";
-import { Loader2, Activity, Cpu, MonitorPlay, HardDrive, Camera } from "lucide-react";
-
+import { Loader2 } from "lucide-react";
 export default function SettingsPage() {
   const { settings, updateSettings } = useSettings();
-  const [profile, setProfile] = React.useState<PrismProfile | null>(null);
-  const [runningCore, setRunningCore] = React.useState(false);
-  const [runningOptical, setRunningOptical] = React.useState(false);
-
-  React.useEffect(() => {
-    setProfile(ProfileManager.load());
-  }, []);
-
-  const handleRunCore = async () => {
-    setRunningCore(true);
-    const results = await BenchmarkEngine.runCoreBenchmarks();
-    ProfileManager.updateScore("cpu", results.cpu);
-    ProfileManager.updateScore("display", results.display);
-    ProfileManager.updateScore("storage", results.storage);
-    setProfile(ProfileManager.load());
-    setRunningCore(false);
-  };
-
-  const handleRunOptical = async () => {
-    setRunningOptical(true);
-    const results = await BenchmarkEngine.runOpticalBenchmark();
-    ProfileManager.updateScore("optical", results.optical);
-    setProfile(ProfileManager.load());
-    setRunningOptical(false);
-  };
 
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto w-full px-4 space-y-8 pb-12">
@@ -48,62 +20,6 @@ export default function SettingsPage() {
           Configure how PrismTransfer generates and receives data.
         </p>
       </div>
-
-      <Card className="w-full bg-card/50 backdrop-blur-md shadow-lg border-primary/20">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" />
-            <CardTitle className="text-xl">Prism Profile</CardTitle>
-          </div>
-          <CardDescription>
-            Your device's performance profile. Used by the Transfer Advisor to automatically select the optimal transfer settings.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex flex-col items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <Cpu className="h-5 w-5 mb-2 text-blue-400" />
-              <span className="text-xs text-muted-foreground">CPU</span>
-              <span className="text-lg font-bold">{profile?.cpu ?? "--"}</span>
-            </div>
-            <div className="flex flex-col items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <MonitorPlay className="h-5 w-5 mb-2 text-green-400" />
-              <span className="text-xs text-muted-foreground">Display</span>
-              <span className="text-lg font-bold">{profile?.display ?? "--"}</span>
-            </div>
-            <div className="flex flex-col items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <HardDrive className="h-5 w-5 mb-2 text-orange-400" />
-              <span className="text-xs text-muted-foreground">Storage</span>
-              <span className="text-lg font-bold">{profile?.storage ?? "--"}</span>
-            </div>
-            <div className="flex flex-col items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <Camera className="h-5 w-5 mb-2 text-purple-400" />
-              <span className="text-xs text-muted-foreground">Optical</span>
-              <span className="text-lg font-bold">{profile?.optical ?? "--"}</span>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col sm:flex-row gap-3 border-t border-border/50 pt-6">
-          <Button 
-            variant="default" 
-            className="w-full sm:w-auto" 
-            onClick={handleRunCore} 
-            disabled={runningCore || runningOptical}
-          >
-            {runningCore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Run Core Benchmark
-          </Button>
-          <Button 
-            variant="secondary" 
-            className="w-full sm:w-auto" 
-            onClick={handleRunOptical} 
-            disabled={runningCore || runningOptical}
-          >
-            {runningOptical && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Run Optical Benchmark
-          </Button>
-        </CardFooter>
-      </Card>
 
       <Card className="w-full bg-card/50 backdrop-blur-md shadow-lg border-border/50">
         <CardHeader>

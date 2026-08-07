@@ -2,21 +2,20 @@ import * as React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PrismProfile, ProfileManager } from "@/lib/profile";
-import { TransferOptions } from "@/types/transfer";
+import { TransferOptions, TransferStrategy } from "@/types/transfer";
 import { Zap, ShieldCheck, Settings, CheckCircle2, AlertCircle } from "lucide-react";
 
 export type TransferPreset = "turbo" | "balanced" | "reliable";
 
 export interface AdvisorRecommendation {
-  preset: TransferPreset;
-  confidence: number;
+  strategy: TransferStrategy;
   reasons: string[];
   estimatedTimeSec: number;
+  confidence: number;
   reliabilityScore: number;
-  options: TransferOptions;
 }
 
-export function generateRecommendation(fileSize: number, profile: PrismProfile): AdvisorRecommendation {
+export function generateRecommendation(fileSize: number, profile: PrismProfile, forcePreset?: TransferPreset): AdvisorRecommendation {
   const isLarge = fileSize > 5 * 1024 * 1024; // > 5MB
   const isSmall = fileSize < 500 * 1024; // < 500KB
   
@@ -24,67 +23,95 @@ export function generateRecommendation(fileSize: number, profile: PrismProfile):
   const hasDisplay = profile.display !== undefined;
 
   let confidence = 50;
-  let preset: TransferPreset = "balanced";
+  let preset: TransferPreset = forcePreset || "balanced";
   let reasons: string[] = [];
   
-  if (hasOptical && hasDisplay) {
+  if (!forcePreset) {
+    if (hasOptical && hasDisplay) {
     confidence = 90;
   } else if (hasOptical || hasDisplay) {
     confidence = 75;
   }
 
   // Basic rules engine
-  if (profile.display && profile.display > 85 && isSmall) {
+  if (profile.display && profile.display.score > 85 && isSmall) {
     preset = "turbo";
-    reasons.push("Small file size");
-    reasons.push("Excellent display performance");
-    if (profile.optical && profile.optical > 85) {
+    reasons.push("Small file size and highly stable display");
+    
+    if (profile.optical && profile.optical.score > 85) {
       reasons.push("High optical reliability");
       confidence = 98;
     }
-  } else if (isLarge || (profile.optical && profile.optical < 50) || (profile.display && profile.display < 50)) {
+  } else if (isLarge || (profile.optical && profile.optical.score < 50) || (profile.display && profile.display.score < 50)) {
     preset = "reliable";
-    if (isLarge) reasons.push("Large file transfer");
-    if (profile.optical && profile.optical < 50) reasons.push("Lower camera performance detected");
-    if (profile.display && profile.display < 50) reasons.push("Display jitter detected");
+    if (isLarge) reasons.push("Large file size defaults to reliable parity");
+    if (profile.optical && profile.optical.score < 50) reasons.push("Lower camera performance detected");
+    if (profile.display && profile.display.score < 50) reasons.push("Display jitter detected");
   } else {
     preset = "balanced";
-    reasons.push("Standard payload size");
-    reasons.push("Balanced error correction");
+      reasons.push("Standard payload size");
+      reasons.push("Balanced error correction");
+    }
+  } else {
+    reasons.push(`User manually selected ${forcePreset} preset`);
   }
 
   // Confidence adjustments
-  if (confidence < 70 && !hasOptical) {
+  if (confidence < 70 && !hasOptical && !forcePreset) {
     reasons.push("Recommendation confidence is lower. Run the Optical Benchmark to improve.");
   }
 
-  // Generate options and estimates based on preset
-  let options: TransferOptions;
-  let estimatedTimeSec: number;
-  let reliabilityScore: number;
-
-  const baseFrames = fileSize / 500; // rough guess
+  // Adaptive Strategy Selection
+  let fps: number;
+  let chunkSize: number;
+  let qrVersion: number;
+  let qrQuietZone: number;
+  let parityRatio: number;
 
   if (preset === "turbo") {
-    options = { fps: 30, errorCorrectionLevel: "L" };
-    estimatedTimeSec = Math.max(1, Math.round(baseFrames / 30));
-    reliabilityScore = 89;
+    fps = profile.display && profile.display.score > 90 ? 60 : 40;
+    chunkSize = profile.optical && profile.optical.score > 85 ? 800 : 500;
+    qrVersion = 30; // High density
+    qrQuietZone = 2; // Small quiet zone
+    parityRatio = 0.05; // 5% redundancy (1 in 20)
   } else if (preset === "reliable") {
-    options = { fps: 15, errorCorrectionLevel: "H" };
-    estimatedTimeSec = Math.max(1, Math.round((baseFrames * 1.3) / 15));
-    reliabilityScore = 99;
+    fps = 15;
+    chunkSize = 250;
+    qrVersion = 10; // Low density
+    qrQuietZone = 4; // Large quiet zone
+    parityRatio = 0.25; // 25% redundancy (1 in 4)
   } else {
-    options = { fps: 20, errorCorrectionLevel: "Q" };
-    estimatedTimeSec = Math.max(1, Math.round((baseFrames * 1.15) / 20));
-    reliabilityScore = 96;
+    fps = profile.display && profile.display.score > 70 ? 30 : 24;
+    chunkSize = 400;
+    qrVersion = 20; // Medium density
+    qrQuietZone = 3; // Medium quiet zone
+    parityRatio = 0.15; // 15% redundancy (1 in ~7)
   }
 
-  return { preset, confidence, reasons, estimatedTimeSec, reliabilityScore, options };
+  const baseFrames = fileSize / chunkSize;
+  const estimatedTimeSec = Math.max(1, Math.round((baseFrames * (1 + parityRatio)) / fps));
+
+  const strategy: TransferStrategy = {
+    preset,
+    confidence,
+    fps,
+    chunkSize,
+    qrVersion,
+    qrQuietZone,
+    parityRatio,
+  };
+
+  let reliabilityScore = 0;
+  if (preset === "turbo") reliabilityScore = 89;
+  else if (preset === "reliable") reliabilityScore = 99;
+  else reliabilityScore = 96;
+
+  return { strategy, reasons, estimatedTimeSec, confidence, reliabilityScore };
 }
 
 interface TransferAdvisorProps {
   file: File;
-  onAccept: (options: TransferOptions) => void;
+  onAccept: (strategy: TransferStrategy) => void;
   onCancel: () => void;
 }
 
@@ -98,18 +125,17 @@ export function TransferAdvisor({ file, onAccept, onCancel }: TransferAdvisorPro
     setProfile(prof);
     const rec = generateRecommendation(file.size, prof);
     setRecommendation(rec);
-    setSelectedPreset(rec.preset);
+    setSelectedPreset(rec.strategy.preset);
   }, [file]);
 
-  if (!recommendation) return null;
+  if (!recommendation || !profile) return null;
 
   const handleStart = () => {
-    if (selectedPreset === "turbo") {
-      onAccept({ fps: 30, errorCorrectionLevel: "L" });
-    } else if (selectedPreset === "reliable") {
-      onAccept({ fps: 15, errorCorrectionLevel: "H" });
+    if (selectedPreset === recommendation.strategy.preset) {
+      onAccept(recommendation.strategy);
     } else {
-      onAccept({ fps: 20, errorCorrectionLevel: "Q" });
+      const customRec = generateRecommendation(file.size, profile, selectedPreset!);
+      onAccept(customRec.strategy);
     }
   };
 
@@ -132,11 +158,11 @@ export function TransferAdvisor({ file, onAccept, onCancel }: TransferAdvisorPro
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Recommended</p>
               <div className="flex items-center gap-2">
                 <span className="text-2xl font-bold">
-                  {recommendation.preset === "turbo" && "Turbo ⚡"}
-                  {recommendation.preset === "balanced" && "Balanced ⭐"}
-                  {recommendation.preset === "reliable" && "Reliable 🛡️"}
+                  {recommendation.strategy.preset === "turbo" && "Turbo ⚡"}
+                  {recommendation.strategy.preset === "balanced" && "Balanced ⭐"}
+                  {recommendation.strategy.preset === "reliable" && "Reliable 🛡️"}
                 </span>
-                {selectedPreset === recommendation.preset && (
+                {selectedPreset === recommendation.strategy.preset && (
                   <CheckCircle2 className="w-5 h-5 text-green-500" />
                 )}
               </div>

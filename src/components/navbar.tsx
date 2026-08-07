@@ -6,13 +6,15 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import { Settings, Menu, X, Send, ScanLine, Info, Home } from "lucide-react";
+import { Settings, Menu, X, Send, ScanLine, Info, Home, Activity } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/send", label: "Send", icon: Send },
   { href: "/receive", label: "Receive", icon: ScanLine },
+  { href: "/analytics", label: "Analytics", icon: Activity },
+  { href: "/benchmark", label: "Benchmark", icon: Activity },
   { href: "/about", label: "About", icon: Info },
 ];
 

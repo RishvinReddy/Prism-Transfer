@@ -19,6 +19,7 @@ export interface QRPlayerProps {
   onLoop?: () => void;
   totalLoops?: number;
   initialFps?: number;
+  quietZone?: number;
 }
 
 function formatSize(bytes: number): string {
@@ -48,13 +49,14 @@ export function QRPlayer({
   onComplete,
   onLoop,
   totalLoops = 0,
-  initialFps = DEFAULT_FPS 
+  initialFps = DEFAULT_FPS,
+  quietZone = 6
 }: QRPlayerProps) {
   const { settings } = useSettings();
   const config = getModeConfig(settings.reliabilityMode);
 
-  // Boot FPS from settings.fps; fall back to mode config only if settings.fps is 0/unset
-  const initialFpsValue = settings.fps > 0 ? settings.fps : config.fps;
+  // Boot FPS from initialFps if provided, else settings.fps, else mode config
+  const initialFpsValue = initialFps || (settings.fps > 0 ? settings.fps : config.fps);
   const [isPlaying, setIsPlaying] = React.useState(true);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [fps, setFps] = React.useState(initialFpsValue);
@@ -159,6 +161,7 @@ export function QRPlayer({
                 size={1024} 
                 className="w-full h-full" 
                 errorCorrectionLevel={ecLevel}
+                quietZone={quietZone}
               />
               
               {/* Optional subtle visual indicator for sync pause in developer mode */}
