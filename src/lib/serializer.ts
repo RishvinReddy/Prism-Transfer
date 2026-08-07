@@ -55,6 +55,12 @@ interface WireManifestV2 {
   h: string;    // sha256
   ca: string;   // compressionAlgorithm
   at: number;   // createdAt
+  // Encryption
+  enc?: boolean;
+  ekdf?: "PBKDF2";
+  eiter?: number;
+  esalt?: string;
+  eiv?: string;
 }
 
 // ─── V2 Serializers ──────────────────────────────────────────────────────────
@@ -105,6 +111,15 @@ export function serializeManifestV2(manifest: TransferManifest): string {
     ca: manifest.compressionAlgorithm,
     at: manifest.createdAt,
   };
+  
+  if (manifest.encryption) {
+    wire.enc = manifest.encryption.enabled;
+    wire.ekdf = manifest.encryption.kdf;
+    wire.eiter = manifest.encryption.iterations;
+    wire.esalt = manifest.encryption.salt;
+    wire.eiv = manifest.encryption.iv;
+  }
+  
   return JSON.stringify(wire);
 }
 
@@ -125,6 +140,16 @@ export function deserializeManifestV2(json: string): TransferManifest {
     sha256:               w.h,
     compressionAlgorithm: w.ca,
     createdAt:            w.at,
+    ...(w.enc ? {
+      encryption: {
+        enabled: w.enc,
+        algorithm: "AES-256-GCM",
+        kdf: w.ekdf || "PBKDF2",
+        iterations: w.eiter || 200000,
+        salt: w.esalt!,
+        iv: w.eiv!
+      }
+    } : {})
   };
 }
 

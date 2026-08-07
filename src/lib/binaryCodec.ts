@@ -111,14 +111,21 @@ export function encodeManifestPacketV3(manifest: TransferManifest): Uint8Array {
   const filenameBytes = textEncoder.encode(manifest.filename);
   const mimeBytes = textEncoder.encode(manifest.mimeType);
 
-  // Header (28) + size(8) + count(4) + parityFields(5) + nameLen(2) + name(N) + mimeLen(1) + mime(M)
-  const envelopeSize = 28 + 8 + 4 + 5 + 2 + filenameBytes.length + 1 + mimeBytes.length;
+  const isEncrypted = !!manifest.encryption;
+  const encSize = isEncrypted ? 33 : 0; // 1 (flags) + 4 (iterations) + 16 (salt) + 12 (iv)
+
+  // Header (28) + size(8) + count(4) + parityFields(5) + nameLen(2) + name(N) + mimeLen(1) + mime(M) + enc(33?)
+  const envelopeSize = 28 + 8 + 4 + 5 + 2 + filenameBytes.length + 1 + mimeBytes.length + encSize;
   const buffer = new Uint8Array(envelopeSize);
   const view = new DataView(buffer.buffer);
 
   view.setUint8(0, V3_MAGIC);
   view.setUint8(1, TYPE_MANIFEST);
-  view.setUint8(2, 0);
+  
+  // Set encryption flag in Flags byte
+  const flags = isEncrypted ? 0x01 : 0x00;
+  view.setUint8(2, flags);
+  
   encodeTransferId(manifest.transferId, view, 3);
   view.setUint32(24, 0, false);
 
@@ -136,7 +143,25 @@ export function encodeManifestPacketV3(manifest: TransferManifest): Uint8Array {
   view.setUint8(mimeOffset, mimeBytes.length);
   buffer.set(mimeBytes, mimeOffset + 1);
 
+  if (isEncrypted && manifest.encryption) {
+    const encOffset = mimeOffset + 1 + mimeBytes.length;
+    // 1 byte config (currently fixed to 0 = PBKDF2 + AES-GCM)
+    view.setUint8(encOffset, 0);
+    view.setUint32(encOffset + 1, manifest.encryption.iterations, false);
+    
+    // Parse hex salt and IV
+    const saltBytes = new Uint8Array(manifest.encryption.salt.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const ivBytes = new Uint8Array(manifest.encryption.iv.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    
+    buffer.set(saltBytes, encOffset + 5);
+    buffer.set(ivBytes, encOffset + 21);
+  }
+
   return buffer;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
@@ -144,6 +169,9 @@ export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
 
   if (view.getUint8(0) !== V3_MAGIC) throw new Error("Not a V3 packet");
   if (view.getUint8(1) !== TYPE_MANIFEST) throw new Error("Not a Manifest packet");
+
+  const flags = view.getUint8(2);
+  const isEncrypted = (flags & 0x01) !== 0;
 
   const transferId = decodeTransferId(view, 3);
   const originalSize = Number(view.getBigUint64(28, false));
@@ -162,6 +190,24 @@ export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
   const mimeBytes = buffer.subarray(mimeOffset + 1, mimeOffset + 1 + mimeLen);
   const mimeType = textDecoder.decode(mimeBytes);
 
+  let encryption: any = undefined;
+  if (isEncrypted) {
+    const encOffset = mimeOffset + 1 + mimeLen;
+    // const config = view.getUint8(encOffset); // currently 0
+    const iterations = view.getUint32(encOffset + 1, false);
+    const saltBytes = buffer.subarray(encOffset + 5, encOffset + 21);
+    const ivBytes = buffer.subarray(encOffset + 21, encOffset + 33);
+    
+    encryption = {
+      enabled: true,
+      algorithm: "AES-256-GCM",
+      kdf: "PBKDF2",
+      iterations,
+      salt: bytesToHex(saltBytes),
+      iv: bytesToHex(ivBytes)
+    };
+  }
+
   return {
     version: 3,
     transferId,
@@ -179,7 +225,8 @@ export function decodeManifestPacketV3(buffer: Uint8Array): TransferManifest {
     chunkSize: 0,
     sha256: "",
     compressionAlgorithm: "deflate-raw",
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    ...(encryption ? { encryption } : {})
   };
 }
 

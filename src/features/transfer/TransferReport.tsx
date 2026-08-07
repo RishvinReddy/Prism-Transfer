@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { TransferProgress } from "@/features/scanner/useProgressTracker";
 import { TransferManifest } from "@/types/transfer";
-import { CheckCircle2, Download, Zap, ShieldCheck, Activity, BarChart4 } from "lucide-react";
+import { CheckCircle2, Download, Zap, ShieldCheck, Activity, BarChart4, Lock } from "lucide-react";
 import { ProfileManager } from "@/lib/profile";
 
 interface TransferReportProps {
@@ -49,8 +49,14 @@ export function TransferReport({ manifest, progress, onClose }: TransferReportPr
           <CheckCircle2 className="w-10 h-10 text-success" />
         </div>
         <CardTitle className="text-2xl">Transfer Complete</CardTitle>
-        <CardDescription>
-          Successfully received {manifest.filename}
+        <CardDescription className="flex flex-col items-center gap-2 mt-2">
+          <span>Successfully received {manifest.filename}</span>
+          {manifest.encryption && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-full">
+              <Lock className="w-3.5 h-3.5" />
+              End-to-End Encrypted
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       

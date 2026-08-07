@@ -18,6 +18,10 @@ import {
   FolderOpen,
   GripVertical,
   ChevronRight,
+  ShieldCheck,
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { TransferController } from "@/features/transfer/TransferController";
 import { motion, AnimatePresence } from "motion/react";
@@ -27,6 +31,10 @@ import { useSettings } from "@/contexts/settings";
 import { useDiagnostics } from "@/contexts/diagnostics";
 import { TransferAdvisor } from "@/features/transfer/TransferAdvisor";
 import { TransferOptions, TransferStrategy } from "@/types/transfer";
+import { scorePassphrase } from "@/lib/encryption";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -99,6 +107,11 @@ export default function SendPage() {
   const [isDragging, setIsDragging] = React.useState(false);
   const [inlineError, setInlineError] = React.useState<string | null>(null);
 
+  // Encryption state
+  const [useEncryption, setUseEncryption] = React.useState(false);
+  const [passphrase, setPassphrase] = React.useState("");
+  const [showPassphrase, setShowPassphrase] = React.useState(false);
+  
   // Drag-to-reorder state
   const dragIndexRef = React.useRef<number | null>(null);
 
@@ -189,6 +202,10 @@ export default function SendPage() {
             parityGroupSize: Math.max(1, Math.round(1 / strategy.parityRatio)),
             reliabilityMode: strategy.preset,
           };
+        }
+        
+        if (useEncryption && passphrase) {
+          options.encryptionPassphrase = passphrase;
         }
 
         worker.postMessage({ file, options });
@@ -460,8 +477,13 @@ export default function SendPage() {
                     <FileCheck className="h-6 w-6 text-success" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-xl text-foreground line-clamp-1">
+                    <h3 className="font-semibold text-xl text-foreground line-clamp-1 flex items-center gap-2">
                       {result.manifest.filename}
+                      {result.manifest.encryption && (
+                        <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                          <Lock className="w-3 h-3" /> Encrypted
+                        </span>
+                      )}
                     </h3>
                     <p className="text-sm text-success font-medium">
                       {fileQueue.length > 1
@@ -612,6 +634,68 @@ export default function SendPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+                
+                {/* Security settings */}
+                <div className="mb-6 p-4 rounded-xl border border-border/40 bg-muted/10">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Security</h3>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Checkbox 
+                      id="encrypt" 
+                      checked={useEncryption} 
+                      onCheckedChange={(checked) => {
+                        setUseEncryption(!!checked);
+                        if (!checked) setPassphrase("");
+                      }}
+                    />
+                    <Label htmlFor="encrypt" className="text-sm cursor-pointer select-none">
+                      Encrypt transfer end-to-end
+                    </Label>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {useEncryption && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="pt-2 pb-1 space-y-3">
+                          <div className="relative">
+                            <Input
+                              type={showPassphrase ? "text" : "password"}
+                              placeholder="Passphrase"
+                              value={passphrase}
+                              onChange={(e) => setPassphrase(e.target.value)}
+                              className="pr-10 bg-background"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassphrase(!showPassphrase)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              {showPassphrase ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">
+                              {passphrase ? `Strength: ${scorePassphrase(passphrase).strength}` : "Enter a strong passphrase"}
+                            </span>
+                            <span className="flex gap-2 text-primary font-medium">
+                              <span className="px-1.5 py-0.5 rounded-md bg-primary/10">AES-256-GCM</span>
+                              <span className="px-1.5 py-0.5 rounded-md bg-primary/10">PBKDF2 (200k)</span>
+                            </span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 <motion.div
                   className={cn(

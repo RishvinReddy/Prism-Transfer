@@ -1,4 +1,4 @@
-
+import type { EncryptionMetadata } from "@/lib/encryption";
 
 export interface TransferManifest {
   version: number;
@@ -15,6 +15,8 @@ export interface TransferManifest {
   sha256: string;
   compressionAlgorithm: string;
   createdAt: number;
+  /** Present only when the transfer is passphrase-encrypted (AES-256-GCM). */
+  encryption?: EncryptionMetadata;
 }
 
 export interface TransferPacket {
@@ -63,6 +65,9 @@ export interface TransferOptions {
   reliabilityMode?: "speed" | "balanced" | "reliable" | "turbo";
   fps?: number; // Playback FPS override
   parityGroupSize?: number;
+  /** Optional passphrase for AES-256-GCM end-to-end encryption.
+   *  Never stored or transmitted — lives only in worker memory during processing. */
+  encryptionPassphrase?: string;
 }
 
 export interface TransferStats {

@@ -6,18 +6,18 @@ import { calculateCRC32 } from "@/lib/checksum";
 import { RecoveryRegistry } from "@/lib/recovery";
 
 export type ReconstructionWorkerRequest = 
-  | { type: "reconstructFile"; manifest: TransferManifest; packets: TransferPacket[] }
+  | { type: "reconstructFile"; manifest: TransferManifest; packets: TransferPacket[]; encryptionPassphrase?: string }
   | { type: "recoverParity"; missingIndex: number; packets: TransferPacket[]; parityPacket: TransferPacket; manifest?: TransferManifest };
 
 self.onmessage = async (event: MessageEvent<ReconstructionWorkerRequest>) => {
   const req = event.data;
   if (req.type === "reconstructFile") {
     try {
-      const { manifest, packets } = req;
+      const { manifest, packets, encryptionPassphrase } = req;
     
     const t0 = performance.now();
     // Perform sorting, decompression, CRC and SHA256 checks in the worker
-    const { blob, metrics } = await reconstructFile(manifest, packets);
+    const { blob, metrics } = await reconstructFile(manifest, packets, { encryptionPassphrase });
     
     // Blob is structured cloneable, we can send it directly
     self.postMessage({ 

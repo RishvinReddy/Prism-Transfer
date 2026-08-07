@@ -22,21 +22,27 @@ export class CPUBenchmark implements BenchmarkModule {
     details.aesEncryptMBps = Math.round(encThroughput);
     details.aesDecryptMBps = Math.round(decThroughput);
 
-    // 4. Worker Startup Latency
+    // 4. PBKDF2 Key Derivation
+    const pbkdf2Latency = await this.measurePBKDF2();
+    details.pbkdf2LatencyMs = Math.round(pbkdf2Latency);
+
+    // 5. Worker Startup Latency
     const workerLatency = await this.measureWorkerStartup();
     details.workerStartupMs = workerLatency;
 
     // Calculate score (out of 100)
-    // 500 MB/s hashing is good (50 pts)
-    const shaScore = Math.min(50, (shaThroughput / 500) * 50);
+    // 500 MB/s hashing is good (40 pts)
+    const shaScore = Math.min(40, (shaThroughput / 500) * 40);
     // 1000 MB/s AES is good (30 pts)
     const aesScore = Math.min(30, (encThroughput / 1000) * 30);
+    // PBKDF2 < 100ms is good (10 pts)
+    const pbkdf2Score = Math.max(0, 10 - (pbkdf2Latency / 10));
     // Worker startup < 20ms is good (10 pts)
     const workerScore = Math.max(0, 10 - (workerLatency / 5));
     // Loop latency < 2ms is good (10 pts)
     const loopScore = Math.max(0, 10 - loopLatency);
 
-    score = Math.round(shaScore + aesScore + workerScore + loopScore);
+    score = Math.round(shaScore + aesScore + pbkdf2Score + workerScore + loopScore);
 
     return {
       name: this.name,
@@ -101,6 +107,39 @@ export class CPUBenchmark implements BenchmarkModule {
       };
     } catch {
       return { encThroughput: 0, decThroughput: 0 };
+    }
+  }
+
+  private async measurePBKDF2(): Promise<number> {
+    try {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey(
+        "raw",
+        enc.encode("benchmark_passphrase"),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+      );
+      
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      
+      const t0 = performance.now();
+      await crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt,
+          iterations: 200000,
+          hash: "SHA-256",
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+      const t1 = performance.now();
+      return t1 - t0;
+    } catch {
+      return 999;
     }
   }
 

@@ -15,6 +15,7 @@ import { compressData } from "./compressor";
 import { encodeBase64Url } from "./encoder";
 import { computeMaxChunkSize } from "./qr";
 import { RecoveryRegistry } from "./recovery";
+import { encryptData, buildAAD } from "./encryption";
 
 // ─── Mode → EC level + safety factor ─────────────────────────────────────────
 //
@@ -116,17 +117,52 @@ export async function processFileForTransfer(
 
   // 3. Compress
   const uncompressedData = new Uint8Array(arrayBuffer);
-  const compressed = compressData(uncompressedData, {
+  let payloadBytes = compressData(uncompressedData, {
     level: (options?.compressionLevel ?? DEFAULT_COMPRESSION) as
       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
   });
-  const compressedSize = compressed.byteLength;
+  
+  let encryptionMetadata;
+  if (options?.encryptionPassphrase) {
+    const aad = buildAAD({
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      originalSize,
+      totalDataPackets: Math.ceil(payloadBytes.byteLength / calculateOptimalChunkSize(options, payloadBytes.byteLength)), // Approximate, will be exact if chunkSize doesn't change
+      compressionAlgorithm: "deflate"
+    });
+    
+    // We need the exact chunk size and packet count before encryption so we can lock AAD
+    const tempChunkSize = calculateOptimalChunkSize(options, payloadBytes.byteLength);
+    // Actually, encrypting adds 16 bytes (tag), which might change chunk count. Let's compute after encrypt.
+    // Wait! AAD needs totalDataPackets. If we encrypt first, size increases by 16 bytes (tag).
+    // Let's compute exact packet count for AAD
+    const encryptedSize = payloadBytes.byteLength + 16;
+    const finalChunkSize = calculateOptimalChunkSize(options, encryptedSize);
+    const finalDataPackets = Math.ceil(encryptedSize / finalChunkSize) || 1;
+    
+    const finalAad = buildAAD({
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      originalSize,
+      totalDataPackets: finalDataPackets,
+      compressionAlgorithm: "deflate"
+    });
+
+    const encResult = await encryptData(payloadBytes, options.encryptionPassphrase, finalAad);
+    payloadBytes = encResult.ciphertext;
+    encryptionMetadata = encResult.metadata;
+    
+    // Clear passphrase reference immediately
+    options.encryptionPassphrase = undefined;
+  }
+  
+  const compressedSize = payloadBytes.byteLength;
   const t2 = performance.now();
 
   // 4. Determine chunk size from real QR capacity
   const chunkSize = calculateOptimalChunkSize(options, compressedSize);
 
-  // 5. Slice → CRC32 → Base64URL → TransferPacket
   // 5. Slice → CRC32 → Base64URL → TransferPacket
   const totalDataPackets = Math.ceil(compressedSize / chunkSize) || 1;
   const packets: TransferPacket[] = [];
@@ -137,7 +173,7 @@ export async function processFileForTransfer(
   for (let index = 0; index < totalDataPackets; index++) {
     const start = index * chunkSize;
     const end = Math.min(start + chunkSize, compressedSize);
-    const chunkBytes = compressed.slice(start, end);
+    const chunkBytes = payloadBytes.slice(start, end);
     rawChunks.push(chunkBytes);
 
     const crc32 = calculateCRC32(chunkBytes);
@@ -200,6 +236,7 @@ export async function processFileForTransfer(
     sha256,
     compressionAlgorithm: "deflate",
     createdAt,
+    ...(encryptionMetadata ? { encryption: encryptionMetadata } : {})
   };
 
   return { 

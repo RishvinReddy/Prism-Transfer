@@ -2,6 +2,7 @@ import { TransferManifest, TransferPacket } from "@/types/transfer";
 import { verifyCRC, verifySHA } from "@/lib/validator";
 import { decompressData } from "@/lib/compressor";
 import { decodeBase64Url } from "@/lib/encoder";
+import { decryptData, buildAAD } from "@/lib/encryption";
 
 export class ReconstructionError extends Error {
   constructor(message: string) {
@@ -16,8 +17,9 @@ export class ReconstructionError extends Error {
  */
 export async function reconstructFile(
   manifest: TransferManifest,
-  packets: TransferPacket[]
-): Promise<{ blob: Blob; metrics: { crcTimeMs: number; decompressTimeMs: number; shaTimeMs: number } }> {
+  packets: TransferPacket[],
+  options?: { encryptionPassphrase?: string }
+): Promise<{ blob: Blob; metrics: { crcTimeMs: number; decryptTimeMs: number; decompressTimeMs: number; shaTimeMs: number } }> {
   if (packets.length !== manifest.totalDataPackets) {
     throw new ReconstructionError(`Missing packets. Expected ${manifest.totalDataPackets}, got ${packets.length}`);
   }
@@ -48,13 +50,44 @@ export async function reconstructFile(
   const t1 = performance.now();
 
   // 3. Merge chunks
-  const mergedBuffer = new Uint8Array(totalCompressedSize);
+  let mergedBuffer: Uint8Array = new Uint8Array(totalCompressedSize);
   let offset = 0;
   for (const chunk of decodedChunks) {
     mergedBuffer.set(chunk, offset);
     offset += chunk.length;
   }
-
+  
+  let decryptTimeMs = 0;
+  
+  if (manifest.encryption) {
+    if (!options?.encryptionPassphrase) {
+      throw new ReconstructionError("Passphrase required for encrypted transfer.");
+    }
+    
+    const tDecrypt = performance.now();
+    const aad = buildAAD({
+      filename: manifest.filename,
+      mimeType: manifest.mimeType,
+      originalSize: manifest.originalSize,
+      totalDataPackets: manifest.totalDataPackets,
+      compressionAlgorithm: manifest.compressionAlgorithm
+    });
+    
+    try {
+      const decrypted = await decryptData(
+        mergedBuffer,
+        options.encryptionPassphrase,
+        manifest.encryption,
+        aad
+      );
+      
+      // Update mergedBuffer reference with decrypted bytes
+      mergedBuffer = decrypted;
+      decryptTimeMs = Math.round(performance.now() - tDecrypt);
+    } catch (err: any) {
+      throw new ReconstructionError(err.message || "Decryption failed.");
+    }
+  }
   // 4. Decompress
   let decompressedData: Uint8Array;
   try {
@@ -83,6 +116,7 @@ export async function reconstructFile(
     blob: new Blob([decompressedData as any], { type: manifest.mimeType }),
     metrics: {
       crcTimeMs: Math.round(t1 - t0),
+      decryptTimeMs,
       decompressTimeMs: Math.round(t2 - t1),
       shaTimeMs: Math.round(t3 - t2)
     }

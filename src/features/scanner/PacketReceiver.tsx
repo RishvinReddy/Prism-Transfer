@@ -32,6 +32,7 @@ import {
   MonitorSmartphone,
   History,
   X,
+  ShieldCheck,
 } from "lucide-react";
 
 // ─── Transfer State Machine ─────────────────────────────────────────────────
@@ -41,6 +42,7 @@ export type ReceiverPhase =
   | "QR Detected"
   | "Receiving Metadata"
   | "Receiving Chunks"
+  | "Awaiting Passphrase"
   | "Verifying CRC"
   | "Reconstructing"
   | "Completed"
@@ -132,6 +134,10 @@ export function PacketReceiver() {
   const [debugPackets, setDebugPackets] = React.useState<DebugPacket[]>([]);
   const [environmentWarning, setEnvironmentWarning] = React.useState<string | null>(null);
 
+  // Decryption state
+  const [receiverPassphrase, setReceiverPassphrase] = React.useState("");
+  const [showReceiverPassphrase, setShowReceiverPassphrase] = React.useState(false);
+
   const [resumeStats, setResumeStats] = React.useState<{ received: number; missing: number; percentage: number; lastActiveMs: number } | null>(null);
 
   // ── Initial phase transition ─────────────────────────────────────────────
@@ -174,6 +180,8 @@ export function PacketReceiver() {
     setDebugPackets([]);
     setResumableSession(null);
     setShowResumeBanner(false);
+    setReceiverPassphrase("");
+    setShowReceiverPassphrase(false);
     lastScannedRef.current = null;
     pauseScannerRef.current = false;
     tracker.resetProgress(0);
@@ -467,72 +475,83 @@ export function PacketReceiver() {
     addDebugPacket({ id: packetId, timestamp, stages, rawPayloadPreview: rawPreview, rawPayloadLength: decodedText.length, finalStatus });
   };
 
-  // ── Reconstruction effect ────────────────────────────────────────────────
   React.useEffect(() => {
     if (tracker.progress.isComplete && manifest && phase === "Receiving Chunks") {
       setIsScanning(false);
-      setPhase("Verifying CRC");
-
-      const run = async () => {
-        try {
-          const allPackets = await packetStore.getAllPackets(manifest.transferId);
-          const dataPackets = allPackets.filter(p => p.kind === "data");
-          setPhase("Reconstructing");
-
-          const worker = new Worker(new URL("../../workers/reconstruction.worker.ts", import.meta.url));
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            worker.onmessage = (e) => {
-              if (e.data.success) {
-                if (diagnosticsCtx) {
-                  diagnosticsCtx.updateReconstructionWorker({
-                    status: "Done",
-                    latencyMs: e.data.metrics?.latencyMs || 0,
-                    details: e.data.metrics?.details
-                  });
-                }
-                resolve(e.data.blob);
-              } else {
-                if (diagnosticsCtx) {
-                  diagnosticsCtx.updateReconstructionWorker({
-                    status: "Error",
-                    error: e.data.error
-                  });
-                }
-                reject(new Error(e.data.error));
-              }
-              worker.terminate();
-            };
-            worker.onerror = (e) => {
-              if (diagnosticsCtx) {
-                diagnosticsCtx.updateReconstructionWorker({
-                  status: "Error",
-                  error: "Worker failed"
-                });
-              }
-              reject(e);
-              worker.terminate();
-            };
-            
-            if (diagnosticsCtx) {
-              diagnosticsCtx.updateReconstructionWorker({ status: "Running", latencyMs: 0 });
-            }
-            
-            worker.postMessage({ type: "reconstructFile", manifest, packets: dataPackets });
-          });
-
-          await packetStore.clearTransfer(manifest.transferId);
-          clearActiveTransferId();
-          setDownloadedBlob({ blob, filename: manifest.filename });
-          setPhase("Completed");
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "An unknown error occurred.");
-          setPhase("Error");
-        }
-      };
-
-      setTimeout(run, 500);
+      
+      if (manifest.encryption) {
+        setPhase("Awaiting Passphrase");
+        return; // wait for user input
+      }
+      
+      startReconstruction();
     }
   }, [tracker.progress.isComplete, manifest, phase]);
+
+  const startReconstruction = async () => {
+    if (!manifest) return;
+    setPhase("Verifying CRC");
+
+    try {
+      const allPackets = await packetStore.getAllPackets(manifest.transferId);
+      const dataPackets = allPackets.filter(p => p.kind === "data");
+      setPhase("Reconstructing");
+
+      const worker = new Worker(new URL("../../workers/reconstruction.worker.ts", import.meta.url));
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        worker.onmessage = (e) => {
+          if (e.data.success) {
+            if (diagnosticsCtx) {
+              diagnosticsCtx.updateReconstructionWorker({
+                status: "Done",
+                latencyMs: e.data.metrics?.latencyMs || 0,
+                details: e.data.metrics?.details
+              });
+            }
+            resolve(e.data.blob);
+          } else {
+            if (diagnosticsCtx) {
+              diagnosticsCtx.updateReconstructionWorker({
+                status: "Error",
+                error: e.data.error
+              });
+            }
+            reject(new Error(e.data.error));
+          }
+          worker.terminate();
+        };
+        worker.onerror = (e) => {
+          if (diagnosticsCtx) {
+            diagnosticsCtx.updateReconstructionWorker({
+              status: "Error",
+              error: "Worker failed"
+            });
+          }
+          reject(e);
+          worker.terminate();
+        };
+        
+        if (diagnosticsCtx) {
+          diagnosticsCtx.updateReconstructionWorker({ status: "Running", latencyMs: 0 });
+        }
+        
+        worker.postMessage({ 
+          type: "reconstructFile", 
+          manifest, 
+          packets: dataPackets,
+          encryptionPassphrase: receiverPassphrase || undefined
+        });
+      });
+
+      await packetStore.clearTransfer(manifest.transferId);
+      clearActiveTransferId();
+      setDownloadedBlob({ blob, filename: manifest.filename });
+      setPhase("Completed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "An unknown error occurred.");
+      setPhase("Error");
+    }
+  };
 
   const isTerminal = phase === "Completed" || phase === "Error";
 
@@ -598,7 +617,7 @@ export function PacketReceiver() {
               </div>
             )}
 
-            {!isTerminal ? (
+            {!isTerminal && phase !== "Awaiting Passphrase" ? (
               <QRScanner
                 isScanning={isScanning}
                 onScan={handleScan}
@@ -606,6 +625,19 @@ export function PacketReceiver() {
                 targetFps={recommendations.throttleFps}
                 onEnvironmentWarning={setEnvironmentWarning}
               />
+            ) : phase === "Awaiting Passphrase" ? (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950 p-6 relative">
+                <div className="absolute inset-0 bg-gradient-to-t from-indigo-500/10 to-transparent pointer-events-none" />
+                <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="flex flex-col items-center text-center space-y-4 z-10 w-full">
+                  <div className="w-12 h-12 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mb-2">
+                    <ShieldCheck className="w-6 h-6 text-indigo-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground tracking-tight">Encrypted Transfer</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
+                    This file is secured with AES-256-GCM. Enter the passphrase to decrypt.
+                  </p>
+                </motion.div>
+              </div>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950">
                 {phase === "Completed" ? (
@@ -793,6 +825,57 @@ export function PacketReceiver() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Corruption</span>
                 <span className="font-mono text-sm font-bold text-red-400 mt-0.5">{tracker.progress.corruptedCount}</span>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Passphrase Input Overlay */}
+        <AnimatePresence>
+          {phase === "Awaiting Passphrase" && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="flex flex-col p-6 bg-zinc-950/40 backdrop-blur-xl border border-indigo-500/40 rounded-2xl space-y-5 shadow-2xl"
+            >
+              <div className="flex flex-col space-y-1">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  Passphrase Required
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  The sender secured this transfer. Enter the passphrase to decrypt and reconstruct the file locally.
+                </p>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showReceiverPassphrase ? "text" : "password"}
+                  placeholder="Enter passphrase"
+                  value={receiverPassphrase}
+                  onChange={(e) => setReceiverPassphrase(e.target.value)}
+                  className="w-full h-12 bg-black/40 border border-zinc-800 rounded-xl px-4 text-sm focus:outline-none focus:border-indigo-500/50 transition-colors"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && receiverPassphrase) startReconstruction();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowReceiverPassphrase(!showReceiverPassphrase)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showReceiverPassphrase ? <X className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                </button>
+              </div>
+
+              <Button
+                onClick={() => startReconstruction()}
+                disabled={!receiverPassphrase}
+                className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all"
+              >
+                Decrypt & Reconstruct
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>
